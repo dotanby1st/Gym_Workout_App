@@ -1,8 +1,61 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { useExercises } from '../hooks/useWorkouts';
 import { Plus, Dumbbell, Calendar, Target, Clock, Edit2, Trash2, Play, Check, History, BarChart3, User, Filter, LogOut, Settings } from 'lucide-react';
 import toast from 'react-hot-toast';
+
+// Separate component for set rows to prevent re-renders
+const SetRow = React.memo(({ exerciseIndex, setIndex, set, weightUnit, isCompleted, updateSetData, completeSet }) => {
+  return (
+    <div className={`grid grid-cols-5 gap-2 p-2 rounded ${isCompleted ? 'bg-green-50 border border-green-200' : 'bg-gray-50'}`}>
+      <div className="flex items-center justify-center">
+        <span className="text-sm font-medium">Set {setIndex + 1}</span>
+      </div>
+      <input
+        type="text"
+        inputMode="decimal"
+        placeholder={`Weight (${weightUnit})`}
+        value={set.weight}
+        onChange={(e) => updateSetData(exerciseIndex, setIndex, 'weight', e.target.value)}
+        className="p-1 border border-gray-300 rounded text-sm focus:outline-none focus:ring-1 focus:ring-blue-500"
+        disabled={isCompleted}
+      />
+      <input
+        type="text"
+        inputMode="numeric"
+        placeholder="Reps"
+        value={set.reps}
+        onChange={(e) => updateSetData(exerciseIndex, setIndex, 'reps', e.target.value)}
+        className="p-1 border border-gray-300 rounded text-sm focus:outline-none focus:ring-1 focus:ring-blue-500"
+        disabled={isCompleted}
+      />
+      <select
+        value={set.rir}
+        onChange={(e) => updateSetData(exerciseIndex, setIndex, 'rir', e.target.value)}
+        className="p-1 border border-gray-300 rounded text-sm focus:outline-none focus:ring-1 focus:ring-blue-500"
+        disabled={isCompleted}
+      >
+        <option value="">RIR</option>
+        <option value="1">1</option>
+        <option value="2">2</option>
+        <option value="3">3</option>
+        <option value="4">4</option>
+        <option value="Fail">Fail</option>
+      </select>
+      <button 
+        onClick={() => completeSet(exerciseIndex, setIndex)}
+        disabled={isCompleted}
+        className={`p-1 rounded text-sm font-bold ${
+          isCompleted 
+            ? 'bg-green-200 text-green-800 cursor-not-allowed' 
+            : 'bg-gray-200 text-gray-700 hover:bg-green-200 hover:text-green-800'
+        }`}
+      >
+        ✓
+      </button>
+    </div>
+  );
+});
 
 const WorkoutTracker = () => {
   const { user, signOut } = useAuth();
@@ -119,46 +172,53 @@ const WorkoutTracker = () => {
     setActiveTab('current');
   };
 
-  const updateSetData = (exerciseIndex, setIndex, field, value) => {
-    if (!currentWorkout) return;
-    
+  const updateSetData = useCallback((exerciseIndex, setIndex, field, value) => {
     setCurrentWorkout(prevWorkout => {
-      const updatedWorkout = { ...prevWorkout };
+      if (!prevWorkout) return prevWorkout;
+      
+      const updatedWorkout = JSON.parse(JSON.stringify(prevWorkout)); // Deep clone
+      
       if (!updatedWorkout.exercises[exerciseIndex].actualSets[setIndex]) {
-        updatedWorkout.exercises[exerciseIndex].actualSets[setIndex] = {};
+        updatedWorkout.exercises[exerciseIndex].actualSets[setIndex] = {
+          weight: '',
+          reps: '',
+          rir: '',
+          completed: false
+        };
       }
+      
       updatedWorkout.exercises[exerciseIndex].actualSets[setIndex][field] = value;
       return updatedWorkout;
     });
-  };
+  }, []);
 
-  const toggleExerciseWeightUnit = (exerciseIndex) => {
-    if (!currentWorkout) return;
-    
+  const toggleExerciseWeightUnit = useCallback((exerciseIndex) => {
     setCurrentWorkout(prevWorkout => {
-      const updatedWorkout = { ...prevWorkout };
+      if (!prevWorkout) return prevWorkout;
+      
+      const updatedWorkout = JSON.parse(JSON.stringify(prevWorkout)); // Deep clone
       const currentUnit = updatedWorkout.exercises[exerciseIndex].weightUnit;
       updatedWorkout.exercises[exerciseIndex].weightUnit = currentUnit === 'kg' ? 'lbs' : 'kg';
       return updatedWorkout;
     });
-  };
+  }, []);
 
-  const completeSet = (exerciseIndex, setIndex) => {
-    if (!currentWorkout) return;
-    
-    const set = currentWorkout.exercises[exerciseIndex].actualSets[setIndex];
-    if (!set?.weight || !set?.reps || !set?.rir) {
-      toast.error('Please fill in all fields before completing the set');
-      return;
-    }
-    
+  const completeSet = useCallback((exerciseIndex, setIndex) => {
     setCurrentWorkout(prevWorkout => {
-      const updatedWorkout = { ...prevWorkout };
+      if (!prevWorkout) return prevWorkout;
+      
+      const set = prevWorkout.exercises[exerciseIndex].actualSets[setIndex];
+      if (!set?.weight || !set?.reps || !set?.rir) {
+        toast.error('Please fill in all fields before completing the set');
+        return prevWorkout;
+      }
+      
+      const updatedWorkout = JSON.parse(JSON.stringify(prevWorkout)); // Deep clone
       updatedWorkout.exercises[exerciseIndex].actualSets[setIndex].completed = true;
+      toast.success('Set completed! 💪');
       return updatedWorkout;
     });
-    toast.success('Set completed! 💪');
-  };
+  }, []);
 
   const finishWorkout = () => {
     if (currentWorkout) {
@@ -285,7 +345,7 @@ const WorkoutTracker = () => {
     </div>
   );
 
-  const CurrentWorkout = () => {
+  const CurrentWorkout = useCallback(() => {
     if (!currentWorkout) {
       return (
         <div className="text-center py-8">
@@ -314,7 +374,7 @@ const WorkoutTracker = () => {
             const exercise = exercises.find(e => e.id === ex.exerciseId);
             
             return (
-              <div key={`workout-current-exercise-${exerciseIndex}-${ex.exerciseId}`} className="bg-white p-4 rounded-lg border border-gray-200">
+              <div key={`workout-exercise-${ex.exerciseId}-${exerciseIndex}`} className="bg-white p-4 rounded-lg border border-gray-200">
                 <div className="flex justify-between items-center mb-3">
                   <h3 className="font-semibold text-gray-800">{exercise?.name || 'Unknown Exercise'}</h3>
                   <button
@@ -327,68 +387,20 @@ const WorkoutTracker = () => {
                 </div>
                 <div className="space-y-2">
                   {Array.from({ length: ex.sets }, (_, setIndex) => {
-                    const set = ex.actualSets[setIndex];
-                    const isCompleted = set?.completed;
+                    const set = ex.actualSets[setIndex] || { weight: '', reps: '', rir: '', completed: false };
+                    const isCompleted = set.completed;
                     
                     return (
-                      <div key={`set-${exerciseIndex}-${setIndex}`} className={`grid grid-cols-5 gap-2 p-2 rounded ${isCompleted ? 'bg-green-50 border border-green-200' : 'bg-gray-50'}`}>
-                        <div className="flex items-center justify-center">
-                          <span className="text-sm font-medium">Set {setIndex + 1}</span>
-                        </div>
-                        <input
-                          key={`weight-${exerciseIndex}-${setIndex}`}
-                          type="text"
-                          inputMode="decimal"
-                          placeholder={`Weight (${ex.weightUnit || 'kg'})`}
-                          value={set?.weight || ''}
-                          onChange={(e) => updateSetData(exerciseIndex, setIndex, 'weight', e.target.value)}
-                          className="p-1 border border-gray-300 rounded text-sm focus:outline-none focus:ring-1 focus:ring-blue-500"
-                          disabled={isCompleted}
-                        />
-                        <input
-                          key={`reps-${exerciseIndex}-${setIndex}`}
-                          type="text"
-                          inputMode="numeric"
-                          placeholder="Reps"
-                          value={set?.reps || ''}
-                          onChange={(e) => updateSetData(exerciseIndex, setIndex, 'reps', e.target.value)}
-                          className="p-1 border border-gray-300 rounded text-sm focus:outline-none focus:ring-1 focus:ring-blue-500"
-                          disabled={isCompleted}
-                        />
-                        <select
-                          key={`rir-${exerciseIndex}-${setIndex}`}
-                          value={set?.rir || ''}
-                          onChange={(e) => {
-                            e.preventDefault();
-                            e.stopPropagation();
-                            updateSetData(exerciseIndex, setIndex, 'rir', e.target.value);
-                          }}
-                          className="p-1 border border-gray-300 rounded text-sm focus:outline-none focus:ring-1 focus:ring-blue-500"
-                          disabled={isCompleted}
-                        >
-                          <option value="">RIR</option>
-                          <option value="1">1</option>
-                          <option value="2">2</option>
-                          <option value="3">3</option>
-                          <option value="4">4</option>
-                          <option value="Fail">Fail</option>
-                        </select>
-                        <button 
-                          onClick={(e) => {
-                            e.preventDefault();
-                            e.stopPropagation();
-                            completeSet(exerciseIndex, setIndex);
-                          }}
-                          disabled={isCompleted}
-                          className={`p-1 rounded text-sm font-bold ${
-                            isCompleted 
-                              ? 'bg-green-200 text-green-800 cursor-not-allowed' 
-                              : 'bg-gray-200 text-gray-700 hover:bg-green-200 hover:text-green-800'
-                          }`}
-                        >
-                          {isCompleted ? '✓' : '✓'}
-                        </button>
-                      </div>
+                      <SetRow
+                        key={`set-row-${exerciseIndex}-${setIndex}`}
+                        exerciseIndex={exerciseIndex}
+                        setIndex={setIndex}
+                        set={set}
+                        weightUnit={ex.weightUnit || 'kg'}
+                        isCompleted={isCompleted}
+                        updateSetData={updateSetData}
+                        completeSet={completeSet}
+                      />
                     );
                   })}
                 </div>
@@ -405,7 +417,7 @@ const WorkoutTracker = () => {
         </button>
       </div>
     );
-  };
+  }, [currentWorkout, exercises, workoutDuration, updateSetData, toggleExerciseWeightUnit, completeSet, finishWorkout, formatDuration]);
 
   const HistoryTab = () => (
     <div className="space-y-4">
