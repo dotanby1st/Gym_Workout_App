@@ -1,59 +1,48 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { useExercises } from '../hooks/useWorkouts';
 import { Plus, Dumbbell, Calendar, Target, Clock, Edit2, Trash2, Play, Check, History, BarChart3, User, Filter, LogOut, Settings } from 'lucide-react';
 import toast from 'react-hot-toast';
 
-// Separate component for set rows to prevent re-renders
-const SetRow = React.memo(({ exerciseIndex, setIndex, set, weightUnit, isCompleted, updateSetData, completeSet }) => {
+// Separate component for individual input to prevent re-renders
+const SetInput = React.memo(({ 
+  type, 
+  inputMode, 
+  placeholder, 
+  value, 
+  onChange, 
+  disabled, 
+  className 
+}) => {
   return (
-    <div className={`grid grid-cols-5 gap-2 p-2 rounded ${isCompleted ? 'bg-green-50 border border-green-200' : 'bg-gray-50'}`}>
-      <div className="flex items-center justify-center">
-        <span className="text-sm font-medium">Set {setIndex + 1}</span>
-      </div>
-      <input
-        type="text"
-        inputMode="decimal"
-        placeholder={`Weight (${weightUnit})`}
-        value={set.weight}
-        onChange={(e) => updateSetData(exerciseIndex, setIndex, 'weight', e.target.value)}
-        className="p-1 border border-gray-300 rounded text-sm focus:outline-none focus:ring-1 focus:ring-blue-500"
-        disabled={isCompleted}
-      />
-      <input
-        type="text"
-        inputMode="numeric"
-        placeholder="Reps"
-        value={set.reps}
-        onChange={(e) => updateSetData(exerciseIndex, setIndex, 'reps', e.target.value)}
-        className="p-1 border border-gray-300 rounded text-sm focus:outline-none focus:ring-1 focus:ring-blue-500"
-        disabled={isCompleted}
-      />
-      <select
-        value={set.rir}
-        onChange={(e) => updateSetData(exerciseIndex, setIndex, 'rir', e.target.value)}
-        className="p-1 border border-gray-300 rounded text-sm focus:outline-none focus:ring-1 focus:ring-blue-500"
-        disabled={isCompleted}
-      >
-        <option value="">RIR</option>
-        <option value="1">1</option>
-        <option value="2">2</option>
-        <option value="3">3</option>
-        <option value="4">4</option>
-        <option value="Fail">Fail</option>
-      </select>
-      <button 
-        onClick={() => completeSet(exerciseIndex, setIndex)}
-        disabled={isCompleted}
-        className={`p-1 rounded text-sm font-bold ${
-          isCompleted 
-            ? 'bg-green-200 text-green-800 cursor-not-allowed' 
-            : 'bg-gray-200 text-gray-700 hover:bg-green-200 hover:text-green-800'
-        }`}
-      >
-        ✓
-      </button>
-    </div>
+    <input
+      type={type}
+      inputMode={inputMode}
+      placeholder={placeholder}
+      value={value}
+      onChange={onChange}
+      disabled={disabled}
+      className={className}
+    />
+  );
+});
+
+// Separate component for RIR select
+const RIRSelect = React.memo(({ value, onChange, disabled, className }) => {
+  return (
+    <select
+      value={value}
+      onChange={onChange}
+      disabled={disabled}
+      className={className}
+    >
+      <option value="">RIR</option>
+      <option value="1">1</option>
+      <option value="2">2</option>
+      <option value="3">3</option>
+      <option value="4">4</option>
+      <option value="Fail">Fail</option>
+    </select>
   );
 });
 
@@ -64,20 +53,52 @@ const WorkoutTracker = () => {
   const [workoutStartTime, setWorkoutStartTime] = useState(null);
   const [workoutDuration, setWorkoutDuration] = useState(0);
 
-  // Local state for demo - we'll connect these to Supabase next
-  const [workoutTemplates, setWorkoutTemplates] = useState([
-    {
-      id: 1,
-      name: 'Push Day',
-      exercises: [
-        { exerciseId: 1, sets: 3, reps: '8-10', weightUnit: 'kg' },
-        { exerciseId: 10, sets: 3, reps: '8-10', weightUnit: 'lbs' }
-      ]
+  // Use localStorage for persistence
+  const [workoutTemplates, setWorkoutTemplates] = useState(() => {
+    try {
+      const saved = localStorage.getItem('workoutTemplates');
+      return saved ? JSON.parse(saved) : [
+        {
+          id: 1,
+          name: 'Push Day',
+          exercises: [
+            { exerciseId: 1, sets: 3, reps: '8-10', weightUnit: 'kg' },
+            { exerciseId: 10, sets: 3, reps: '8-10', weightUnit: 'lbs' }
+          ]
+        }
+      ];
+    } catch (error) {
+      return [
+        {
+          id: 1,
+          name: 'Push Day',
+          exercises: [
+            { exerciseId: 1, sets: 3, reps: '8-10', weightUnit: 'kg' },
+            { exerciseId: 10, sets: 3, reps: '8-10', weightUnit: 'lbs' }
+          ]
+        }
+      ];
     }
-  ]);
+  });
   
-  const [workoutHistory, setWorkoutHistory] = useState([]);
-  const [measurements, setMeasurements] = useState([]);
+  const [workoutHistory, setWorkoutHistory] = useState(() => {
+    try {
+      const saved = localStorage.getItem('workoutHistory');
+      return saved ? JSON.parse(saved) : [];
+    } catch (error) {
+      return [];
+    }
+  });
+  
+  const [measurements, setMeasurements] = useState(() => {
+    try {
+      const saved = localStorage.getItem('measurements');
+      return saved ? JSON.parse(saved) : [];
+    } catch (error) {
+      return [];
+    }
+  });
+  
   const [currentWorkout, setCurrentWorkout] = useState(null);
   const [showNewExercise, setShowNewExercise] = useState(false);
   const [showNewMeasurement, setShowNewMeasurement] = useState(false);
@@ -86,6 +107,31 @@ const WorkoutTracker = () => {
   const [newExercise, setNewExercise] = useState({ name: '', category: '', equipment: '' });
   const [newMeasurement, setNewMeasurement] = useState({ type: '', value: '', date: new Date().toISOString().split('T')[0] });
   const [selectedExerciseHistory, setSelectedExerciseHistory] = useState(null);
+
+  // Save to localStorage whenever state changes
+  useEffect(() => {
+    try {
+      localStorage.setItem('workoutTemplates', JSON.stringify(workoutTemplates));
+    } catch (error) {
+      console.error('Failed to save workout templates:', error);
+    }
+  }, [workoutTemplates]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('workoutHistory', JSON.stringify(workoutHistory));
+    } catch (error) {
+      console.error('Failed to save workout history:', error);
+    }
+  }, [workoutHistory]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('measurements', JSON.stringify(measurements));
+    } catch (error) {
+      console.error('Failed to save measurements:', error);
+    }
+  }, [measurements]);
 
   // Timer effect for workout duration
   useEffect(() => {
@@ -98,7 +144,7 @@ const WorkoutTracker = () => {
     return () => clearInterval(interval);
   }, [workoutStartTime]);
 
-  const formatDuration = (seconds) => {
+  const formatDuration = useCallback((seconds) => {
     const hours = Math.floor(seconds / 3600);
     const mins = Math.floor((seconds % 3600) / 60);
     const secs = seconds % 60;
@@ -106,7 +152,7 @@ const WorkoutTracker = () => {
       return `${hours}:${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
     }
     return `${mins}:${secs.toString().padStart(2, '0')}`;
-  };
+  }, []);
 
   const handleAddExercise = async () => {
     if (newExercise.name && newExercise.category && newExercise.equipment) {
@@ -118,7 +164,7 @@ const WorkoutTracker = () => {
 
   const handleAddMeasurement = () => {
     if (newMeasurement.type && newMeasurement.value && newMeasurement.date) {
-      setMeasurements([...measurements, {
+      setMeasurements(prev => [...prev, {
         id: Date.now(),
         type: newMeasurement.type,
         value: parseFloat(newMeasurement.value),
@@ -130,20 +176,19 @@ const WorkoutTracker = () => {
   };
 
   const handleCreateTemplate = () => {
-    if (newTemplate.name) {
-      // For now, create template with default exercises (we'll improve this later)
+    if (newTemplate.name.trim()) {
       const template = {
         id: Date.now(),
-        name: newTemplate.name,
+        name: newTemplate.name.trim(),
         exercises: [
           { exerciseId: 1, sets: 3, reps: '8-10', weightUnit: 'kg' },
           { exerciseId: 10, sets: 3, reps: '8-10', weightUnit: 'kg' }
         ]
       };
-      setWorkoutTemplates([...workoutTemplates, template]);
+      setWorkoutTemplates(prev => [...prev, template]);
       setNewTemplate({ name: '', exercises: [] });
       setShowNewTemplate(false);
-      toast.success('Template created successfully!');
+      toast.success('Template created and saved!');
     } else {
       toast.error('Please enter a template name');
     }
@@ -157,7 +202,7 @@ const WorkoutTracker = () => {
       ...template,
       startTime: new Date(startTime),
       completedSets: {},
-      exercises: template.exercises.map((ex, index) => ({
+      exercises: template.exercises.map((ex) => ({
         ...ex,
         actualSets: Array(ex.sets).fill(null).map(() => ({
           weight: '',
@@ -172,54 +217,6 @@ const WorkoutTracker = () => {
     setActiveTab('current');
   };
 
-  const updateSetData = useCallback((exerciseIndex, setIndex, field, value) => {
-    setCurrentWorkout(prevWorkout => {
-      if (!prevWorkout) return prevWorkout;
-      
-      const updatedWorkout = JSON.parse(JSON.stringify(prevWorkout)); // Deep clone
-      
-      if (!updatedWorkout.exercises[exerciseIndex].actualSets[setIndex]) {
-        updatedWorkout.exercises[exerciseIndex].actualSets[setIndex] = {
-          weight: '',
-          reps: '',
-          rir: '',
-          completed: false
-        };
-      }
-      
-      updatedWorkout.exercises[exerciseIndex].actualSets[setIndex][field] = value;
-      return updatedWorkout;
-    });
-  }, []);
-
-  const toggleExerciseWeightUnit = useCallback((exerciseIndex) => {
-    setCurrentWorkout(prevWorkout => {
-      if (!prevWorkout) return prevWorkout;
-      
-      const updatedWorkout = JSON.parse(JSON.stringify(prevWorkout)); // Deep clone
-      const currentUnit = updatedWorkout.exercises[exerciseIndex].weightUnit;
-      updatedWorkout.exercises[exerciseIndex].weightUnit = currentUnit === 'kg' ? 'lbs' : 'kg';
-      return updatedWorkout;
-    });
-  }, []);
-
-  const completeSet = useCallback((exerciseIndex, setIndex) => {
-    setCurrentWorkout(prevWorkout => {
-      if (!prevWorkout) return prevWorkout;
-      
-      const set = prevWorkout.exercises[exerciseIndex].actualSets[setIndex];
-      if (!set?.weight || !set?.reps || !set?.rir) {
-        toast.error('Please fill in all fields before completing the set');
-        return prevWorkout;
-      }
-      
-      const updatedWorkout = JSON.parse(JSON.stringify(prevWorkout)); // Deep clone
-      updatedWorkout.exercises[exerciseIndex].actualSets[setIndex].completed = true;
-      toast.success('Set completed! 💪');
-      return updatedWorkout;
-    });
-  }, []);
-
   const finishWorkout = () => {
     if (currentWorkout) {
       const completedWorkout = {
@@ -228,7 +225,7 @@ const WorkoutTracker = () => {
         duration: workoutDuration,
         id: Date.now()
       };
-      setWorkoutHistory([completedWorkout, ...workoutHistory]);
+      setWorkoutHistory(prev => [completedWorkout, ...prev]);
       toast.success('Workout completed! 💪');
     }
     
@@ -244,13 +241,15 @@ const WorkoutTracker = () => {
   };
 
   // Group exercises by category
-  const exercisesByCategory = exercises.reduce((acc, exercise) => {
-    if (!acc[exercise.category]) {
-      acc[exercise.category] = [];
-    }
-    acc[exercise.category].push(exercise);
-    return acc;
-  }, {});
+  const exercisesByCategory = useMemo(() => {
+    return exercises.reduce((acc, exercise) => {
+      if (!acc[exercise.category]) {
+        acc[exercise.category] = [];
+      }
+      acc[exercise.category].push(exercise);
+      return acc;
+    }, {});
+  }, [exercises]);
 
   const ExerciseList = () => (
     <div className="space-y-4">
@@ -289,9 +288,7 @@ const WorkoutTracker = () => {
                       <p className="text-sm text-gray-600">{exercise.equipment}</p>
                       {exercise.is_custom && <span className="text-xs bg-green-100 text-green-800 px-2 py-1 rounded">Custom</span>}
                     </div>
-                    <div className="text-sm text-gray-500">
-                      Tap for history
-                    </div>
+                    <div className="text-sm text-gray-500">Tap for history</div>
                   </div>
                 </div>
               ))}
@@ -345,7 +342,7 @@ const WorkoutTracker = () => {
     </div>
   );
 
-  const CurrentWorkout = useCallback(() => {
+  const CurrentWorkout = () => {
     if (!currentWorkout) {
       return (
         <div className="text-center py-8">
@@ -354,6 +351,52 @@ const WorkoutTracker = () => {
         </div>
       );
     }
+
+    const updateSetData = (exerciseIndex, setIndex, field, value) => {
+      setCurrentWorkout(prev => {
+        const updated = { ...prev };
+        updated.exercises = [...prev.exercises];
+        updated.exercises[exerciseIndex] = { ...prev.exercises[exerciseIndex] };
+        updated.exercises[exerciseIndex].actualSets = [...prev.exercises[exerciseIndex].actualSets];
+        updated.exercises[exerciseIndex].actualSets[setIndex] = {
+          ...prev.exercises[exerciseIndex].actualSets[setIndex],
+          [field]: value
+        };
+        return updated;
+      });
+    };
+
+    const toggleExerciseWeightUnit = (exerciseIndex) => {
+      setCurrentWorkout(prev => {
+        const updated = { ...prev };
+        updated.exercises = [...prev.exercises];
+        updated.exercises[exerciseIndex] = { ...prev.exercises[exerciseIndex] };
+        const currentUnit = updated.exercises[exerciseIndex].weightUnit;
+        updated.exercises[exerciseIndex].weightUnit = currentUnit === 'kg' ? 'lbs' : 'kg';
+        return updated;
+      });
+    };
+
+    const completeSet = (exerciseIndex, setIndex) => {
+      const set = currentWorkout.exercises[exerciseIndex].actualSets[setIndex];
+      if (!set?.weight || !set?.reps || !set?.rir) {
+        toast.error('Please fill in all fields before completing the set');
+        return;
+      }
+      
+      setCurrentWorkout(prev => {
+        const updated = { ...prev };
+        updated.exercises = [...prev.exercises];
+        updated.exercises[exerciseIndex] = { ...prev.exercises[exerciseIndex] };
+        updated.exercises[exerciseIndex].actualSets = [...prev.exercises[exerciseIndex].actualSets];
+        updated.exercises[exerciseIndex].actualSets[setIndex] = {
+          ...prev.exercises[exerciseIndex].actualSets[setIndex],
+          completed: true
+        };
+        return updated;
+      });
+      toast.success('Set completed! 💪');
+    };
 
     return (
       <div className="space-y-4">
@@ -374,7 +417,7 @@ const WorkoutTracker = () => {
             const exercise = exercises.find(e => e.id === ex.exerciseId);
             
             return (
-              <div key={`workout-exercise-${ex.exerciseId}-${exerciseIndex}`} className="bg-white p-4 rounded-lg border border-gray-200">
+              <div key={`exercise-${exerciseIndex}`} className="bg-white p-4 rounded-lg border border-gray-200">
                 <div className="flex justify-between items-center mb-3">
                   <h3 className="font-semibold text-gray-800">{exercise?.name || 'Unknown Exercise'}</h3>
                   <button
@@ -391,16 +434,50 @@ const WorkoutTracker = () => {
                     const isCompleted = set.completed;
                     
                     return (
-                      <SetRow
-                        key={`set-row-${exerciseIndex}-${setIndex}`}
-                        exerciseIndex={exerciseIndex}
-                        setIndex={setIndex}
-                        set={set}
-                        weightUnit={ex.weightUnit || 'kg'}
-                        isCompleted={isCompleted}
-                        updateSetData={updateSetData}
-                        completeSet={completeSet}
-                      />
+                      <div key={`set-${exerciseIndex}-${setIndex}`} className={`grid grid-cols-5 gap-2 p-2 rounded ${isCompleted ? 'bg-green-50 border border-green-200' : 'bg-gray-50'}`}>
+                        <div className="flex items-center justify-center">
+                          <span className="text-sm font-medium">Set {setIndex + 1}</span>
+                        </div>
+                        
+                        <SetInput
+                          type="text"
+                          inputMode="decimal"
+                          placeholder={`Weight (${ex.weightUnit || 'kg'})`}
+                          value={set.weight}
+                          onChange={(e) => updateSetData(exerciseIndex, setIndex, 'weight', e.target.value)}
+                          disabled={isCompleted}
+                          className="p-1 border border-gray-300 rounded text-sm focus:outline-none focus:ring-1 focus:ring-blue-500"
+                        />
+                        
+                        <SetInput
+                          type="text"
+                          inputMode="numeric"
+                          placeholder="Reps"
+                          value={set.reps}
+                          onChange={(e) => updateSetData(exerciseIndex, setIndex, 'reps', e.target.value)}
+                          disabled={isCompleted}
+                          className="p-1 border border-gray-300 rounded text-sm focus:outline-none focus:ring-1 focus:ring-blue-500"
+                        />
+                        
+                        <RIRSelect
+                          value={set.rir}
+                          onChange={(e) => updateSetData(exerciseIndex, setIndex, 'rir', e.target.value)}
+                          disabled={isCompleted}
+                          className="p-1 border border-gray-300 rounded text-sm focus:outline-none focus:ring-1 focus:ring-blue-500"
+                        />
+                        
+                        <button 
+                          onClick={() => completeSet(exerciseIndex, setIndex)}
+                          disabled={isCompleted}
+                          className={`p-1 rounded text-sm font-bold ${
+                            isCompleted 
+                              ? 'bg-green-200 text-green-800 cursor-not-allowed' 
+                              : 'bg-gray-200 text-gray-700 hover:bg-green-200 hover:text-green-800'
+                          }`}
+                        >
+                          ✓
+                        </button>
+                      </div>
                     );
                   })}
                 </div>
@@ -417,7 +494,7 @@ const WorkoutTracker = () => {
         </button>
       </div>
     );
-  }, [currentWorkout, exercises, workoutDuration, updateSetData, toggleExerciseWeightUnit, completeSet, finishWorkout, formatDuration]);
+  };
 
   const HistoryTab = () => (
     <div className="space-y-4">
@@ -433,7 +510,7 @@ const WorkoutTracker = () => {
                 <div className="text-sm text-gray-600">{formatDuration(workout.duration)}</div>
               </div>
               <p className="text-sm text-gray-600">
-                {workout.startTime.toLocaleDateString()} • {workout.startTime.toLocaleTimeString()}
+                {new Date(workout.startTime).toLocaleDateString()} • {new Date(workout.startTime).toLocaleTimeString()}
               </p>
             </div>
           ))
@@ -508,7 +585,6 @@ const WorkoutTracker = () => {
         {activeTab === 'measurements' && <MeasurementsTab />}
       </div>
 
-      {/* Navigation */}
       <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 px-2 py-2">
         <div className="flex justify-around">
           {[
@@ -532,7 +608,6 @@ const WorkoutTracker = () => {
         </div>
       </div>
 
-      {/* Modals */}
       {showNewExercise && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
           <div className="bg-white p-6 rounded-lg w-full max-w-md mx-4">
@@ -601,7 +676,7 @@ const WorkoutTracker = () => {
                 onChange={(e) => setNewTemplate({...newTemplate, name: e.target.value})}
                 className="w-full p-3 border border-gray-300 rounded-lg"
               />
-              <p className="text-sm text-gray-600">Note: Exercise selection will be added in the next update. For now, templates will use default exercises.</p>
+              <p className="text-sm text-gray-600">Template will be created with default exercises.</p>
               <div className="flex gap-2">
                 <button
                   onClick={handleCreateTemplate}
