@@ -29,6 +29,11 @@ const WorkoutTracker = () => {
   const [currentWorkout, setCurrentWorkout] = useState(null);
   const [showNewExercise, setShowNewExercise] = useState(false);
   const [showNewMeasurement, setShowNewMeasurement] = useState(false);
+  const [showNewTemplate, setShowNewTemplate] = useState(false);
+  const [showWeightUnitSelection, setShowWeightUnitSelection] = useState(false);
+  const [selectedTemplate, setSelectedTemplate] = useState(null);
+  const [selectedWeightUnit, setSelectedWeightUnit] = useState('kg');
+  const [newTemplate, setNewTemplate] = useState({ name: '', exercises: [] });
   const [newExercise, setNewExercise] = useState({ name: '', category: '', equipment: '' });
   const [newMeasurement, setNewMeasurement] = useState({ type: '', value: '', date: new Date().toISOString().split('T')[0] });
   const [selectedExerciseHistory, setSelectedExerciseHistory] = useState(null);
@@ -75,20 +80,57 @@ const WorkoutTracker = () => {
     }
   };
 
-  const startWorkout = (template) => {
+  const handleCreateTemplate = () => {
+    if (newTemplate.name && newTemplate.exercises.length > 0) {
+      const template = {
+        id: Date.now(),
+        name: newTemplate.name,
+        weightUnit: 'kg', // Default unit
+        exercises: newTemplate.exercises
+      };
+      setWorkoutTemplates([...workoutTemplates, template]);
+      setNewTemplate({ name: '', exercises: [] });
+      setShowNewTemplate(false);
+      toast.success('Template created successfully!');
+    }
+  };
+
+  const handleStartTemplate = (template) => {
+    setSelectedTemplate(template);
+    setShowWeightUnitSelection(true);
+  };
+
+  const startWorkout = (template, weightUnit) => {
     const startTime = Date.now();
     setWorkoutStartTime(startTime);
-    setCurrentWorkout({
+    
+    const workout = {
       ...template,
       startTime: new Date(startTime),
       completedSets: {},
+      weightUnit: weightUnit,
       exercises: template.exercises.map((ex, index) => ({
         ...ex,
-        actualSets: Array(ex.sets).fill(null).map(() => ({})),
-        weightUnit: template.weightUnit || 'kg'
+        actualSets: Array(ex.sets).fill(null).map(() => ({
+          weight: '',
+          reps: '',
+          rir: ''
+        }))
       }))
-    });
+    };
+    
+    setCurrentWorkout(workout);
     setActiveTab('current');
+    setShowWeightUnitSelection(false);
+    setSelectedTemplate(null);
+  };
+
+  const updateSetData = (exerciseIndex, setIndex, field, value) => {
+    if (!currentWorkout) return;
+    
+    const updatedWorkout = { ...currentWorkout };
+    updatedWorkout.exercises[exerciseIndex].actualSets[setIndex][field] = value;
+    setCurrentWorkout(updatedWorkout);
   };
 
   const finishWorkout = () => {
@@ -177,7 +219,10 @@ const WorkoutTracker = () => {
     <div className="space-y-4">
       <div className="flex justify-between items-center">
         <h2 className="text-xl font-bold text-gray-800">Workout Templates</h2>
-        <button className="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded-lg flex items-center gap-2">
+        <button 
+          onClick={() => setShowNewTemplate(true)}
+          className="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded-lg flex items-center gap-2"
+        >
           <Plus size={20} />
           New Template
         </button>
@@ -189,7 +234,7 @@ const WorkoutTracker = () => {
             <div className="flex justify-between items-start mb-3">
               <h3 className="font-semibold text-gray-800">{template.name}</h3>
               <button
-                onClick={() => startWorkout(template)}
+                onClick={() => handleStartTemplate(template)}
                 className="bg-green-500 hover:bg-green-600 text-white px-3 py-1 rounded flex items-center gap-1"
               >
                 <Play size={16} />
@@ -233,6 +278,9 @@ const WorkoutTracker = () => {
                 <Clock size={20} className="text-blue-600" />
                 <span className="text-blue-600">{formatDuration(workoutDuration)}</span>
               </div>
+              <div className="text-sm text-gray-600">
+                Unit: {currentWorkout.weightUnit.toUpperCase()}
+              </div>
             </div>
           </div>
         </div>
@@ -246,20 +294,34 @@ const WorkoutTracker = () => {
                 <h3 className="font-semibold text-gray-800 mb-3">{exercise?.name || 'Unknown Exercise'}</h3>
                 <div className="space-y-2">
                   {Array.from({ length: ex.sets }, (_, setIndex) => (
-                    <div key={`set-${exerciseIndex}-${setIndex}`} className="grid grid-cols-4 gap-2 p-2 bg-gray-50 rounded">
+                    <div key={`set-${exerciseIndex}-${setIndex}`} className="grid grid-cols-5 gap-2 p-2 bg-gray-50 rounded">
                       <div className="flex items-center justify-center">
                         <span className="text-sm font-medium">Set {setIndex + 1}</span>
                       </div>
                       <input
                         type="number"
                         step="0.5"
-                        placeholder="Weight (kg)"
+                        placeholder={`Weight (${currentWorkout.weightUnit})`}
+                        value={ex.actualSets[setIndex]?.weight || ''}
+                        onChange={(e) => updateSetData(exerciseIndex, setIndex, 'weight', e.target.value)}
                         className="p-1 border border-gray-300 rounded text-sm"
                       />
                       <input
                         type="number"
                         placeholder="Reps"
+                        value={ex.actualSets[setIndex]?.reps || ''}
+                        onChange={(e) => updateSetData(exerciseIndex, setIndex, 'reps', e.target.value)}
                         className="p-1 border border-gray-300 rounded text-sm"
+                      />
+                      <input
+                        type="number"
+                        min="0"
+                        max="10"
+                        placeholder="RIR"
+                        value={ex.actualSets[setIndex]?.rir || ''}
+                        onChange={(e) => updateSetData(exerciseIndex, setIndex, 'rir', e.target.value)}
+                        className="p-1 border border-gray-300 rounded text-sm"
+                        title="Reps in Reserve (0-10)"
                       />
                       <button className="p-1 rounded text-sm bg-gray-200 text-gray-700 hover:bg-gray-300">
                         ✓
@@ -442,6 +504,87 @@ const WorkoutTracker = () => {
                 </button>
                 <button
                   onClick={() => setShowNewExercise(false)}
+                  className="flex-1 bg-gray-300 hover:bg-gray-400 text-gray-700 py-2 rounded-lg"
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showNewTemplate && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white p-6 rounded-lg w-full max-w-md mx-4">
+            <h3 className="text-lg font-bold mb-4">Create New Template</h3>
+            <div className="space-y-4">
+              <input
+                type="text"
+                placeholder="Template name"
+                value={newTemplate.name}
+                onChange={(e) => setNewTemplate({...newTemplate, name: e.target.value})}
+                className="w-full p-3 border border-gray-300 rounded-lg"
+              />
+              <p className="text-sm text-gray-600">Note: Exercise selection will be added in the next update. For now, templates will use default exercises.</p>
+              <div className="flex gap-2">
+                <button
+                  onClick={handleCreateTemplate}
+                  className="flex-1 bg-blue-500 hover:bg-blue-600 text-white py-2 rounded-lg"
+                >
+                  Create Template
+                </button>
+                <button
+                  onClick={() => setShowNewTemplate(false)}
+                  className="flex-1 bg-gray-300 hover:bg-gray-400 text-gray-700 py-2 rounded-lg"
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showWeightUnitSelection && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white p-6 rounded-lg w-full max-w-md mx-4">
+            <h3 className="text-lg font-bold mb-4">Choose Weight Unit</h3>
+            <div className="space-y-4">
+              <div className="grid grid-cols-2 gap-4">
+                <button
+                  onClick={() => setSelectedWeightUnit('kg')}
+                  className={`p-4 rounded-lg border-2 font-medium ${
+                    selectedWeightUnit === 'kg' 
+                      ? 'border-blue-500 bg-blue-50 text-blue-700' 
+                      : 'border-gray-300 hover:border-gray-400'
+                  }`}
+                >
+                  Kilograms (KG)
+                </button>
+                <button
+                  onClick={() => setSelectedWeightUnit('lbs')}
+                  className={`p-4 rounded-lg border-2 font-medium ${
+                    selectedWeightUnit === 'lbs' 
+                      ? 'border-blue-500 bg-blue-50 text-blue-700' 
+                      : 'border-gray-300 hover:border-gray-400'
+                  }`}
+                >
+                  Pounds (LBS)
+                </button>
+              </div>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => startWorkout(selectedTemplate, selectedWeightUnit)}
+                  className="flex-1 bg-green-500 hover:bg-green-600 text-white py-2 rounded-lg"
+                >
+                  Start Workout
+                </button>
+                <button
+                  onClick={() => {
+                    setShowWeightUnitSelection(false);
+                    setSelectedTemplate(null);
+                  }}
                   className="flex-1 bg-gray-300 hover:bg-gray-400 text-gray-700 py-2 rounded-lg"
                 >
                   Cancel
