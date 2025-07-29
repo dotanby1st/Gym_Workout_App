@@ -77,16 +77,22 @@ const WorkoutTracker = () => {
   };
 
   const handleCreateTemplate = () => {
-    if (newTemplate.name && newTemplate.exercises.length > 0) {
+    if (newTemplate.name) {
+      // For now, create template with default exercises (we'll improve this later)
       const template = {
         id: Date.now(),
         name: newTemplate.name,
-        exercises: newTemplate.exercises
+        exercises: [
+          { exerciseId: 1, sets: 3, reps: '8-10', weightUnit: 'kg' },
+          { exerciseId: 10, sets: 3, reps: '8-10', weightUnit: 'kg' }
+        ]
       };
       setWorkoutTemplates([...workoutTemplates, template]);
       setNewTemplate({ name: '', exercises: [] });
       setShowNewTemplate(false);
       toast.success('Template created successfully!');
+    } else {
+      toast.error('Please enter a template name');
     }
   };
 
@@ -116,32 +122,41 @@ const WorkoutTracker = () => {
   const updateSetData = (exerciseIndex, setIndex, field, value) => {
     if (!currentWorkout) return;
     
-    const updatedWorkout = { ...currentWorkout };
-    updatedWorkout.exercises[exerciseIndex].actualSets[setIndex][field] = value;
-    setCurrentWorkout(updatedWorkout);
+    setCurrentWorkout(prevWorkout => {
+      const updatedWorkout = { ...prevWorkout };
+      if (!updatedWorkout.exercises[exerciseIndex].actualSets[setIndex]) {
+        updatedWorkout.exercises[exerciseIndex].actualSets[setIndex] = {};
+      }
+      updatedWorkout.exercises[exerciseIndex].actualSets[setIndex][field] = value;
+      return updatedWorkout;
+    });
   };
 
   const toggleExerciseWeightUnit = (exerciseIndex) => {
     if (!currentWorkout) return;
     
-    const updatedWorkout = { ...currentWorkout };
-    const currentUnit = updatedWorkout.exercises[exerciseIndex].weightUnit;
-    updatedWorkout.exercises[exerciseIndex].weightUnit = currentUnit === 'kg' ? 'lbs' : 'kg';
-    setCurrentWorkout(updatedWorkout);
+    setCurrentWorkout(prevWorkout => {
+      const updatedWorkout = { ...prevWorkout };
+      const currentUnit = updatedWorkout.exercises[exerciseIndex].weightUnit;
+      updatedWorkout.exercises[exerciseIndex].weightUnit = currentUnit === 'kg' ? 'lbs' : 'kg';
+      return updatedWorkout;
+    });
   };
 
   const completeSet = (exerciseIndex, setIndex) => {
     if (!currentWorkout) return;
     
     const set = currentWorkout.exercises[exerciseIndex].actualSets[setIndex];
-    if (!set.weight || !set.reps || !set.rir) {
+    if (!set?.weight || !set?.reps || !set?.rir) {
       toast.error('Please fill in all fields before completing the set');
       return;
     }
     
-    const updatedWorkout = { ...currentWorkout };
-    updatedWorkout.exercises[exerciseIndex].actualSets[setIndex].completed = true;
-    setCurrentWorkout(updatedWorkout);
+    setCurrentWorkout(prevWorkout => {
+      const updatedWorkout = { ...prevWorkout };
+      updatedWorkout.exercises[exerciseIndex].actualSets[setIndex].completed = true;
+      return updatedWorkout;
+    });
     toast.success('Set completed! 💪');
   };
 
@@ -321,27 +336,34 @@ const WorkoutTracker = () => {
                           <span className="text-sm font-medium">Set {setIndex + 1}</span>
                         </div>
                         <input
+                          key={`weight-${exerciseIndex}-${setIndex}`}
                           type="text"
                           inputMode="decimal"
                           placeholder={`Weight (${ex.weightUnit || 'kg'})`}
                           value={set?.weight || ''}
                           onChange={(e) => updateSetData(exerciseIndex, setIndex, 'weight', e.target.value)}
-                          className="p-1 border border-gray-300 rounded text-sm"
+                          className="p-1 border border-gray-300 rounded text-sm focus:outline-none focus:ring-1 focus:ring-blue-500"
                           disabled={isCompleted}
                         />
                         <input
+                          key={`reps-${exerciseIndex}-${setIndex}`}
                           type="text"
                           inputMode="numeric"
                           placeholder="Reps"
                           value={set?.reps || ''}
                           onChange={(e) => updateSetData(exerciseIndex, setIndex, 'reps', e.target.value)}
-                          className="p-1 border border-gray-300 rounded text-sm"
+                          className="p-1 border border-gray-300 rounded text-sm focus:outline-none focus:ring-1 focus:ring-blue-500"
                           disabled={isCompleted}
                         />
                         <select
+                          key={`rir-${exerciseIndex}-${setIndex}`}
                           value={set?.rir || ''}
-                          onChange={(e) => updateSetData(exerciseIndex, setIndex, 'rir', e.target.value)}
-                          className="p-1 border border-gray-300 rounded text-sm"
+                          onChange={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            updateSetData(exerciseIndex, setIndex, 'rir', e.target.value);
+                          }}
+                          className="p-1 border border-gray-300 rounded text-sm focus:outline-none focus:ring-1 focus:ring-blue-500"
                           disabled={isCompleted}
                         >
                           <option value="">RIR</option>
@@ -352,7 +374,11 @@ const WorkoutTracker = () => {
                           <option value="Fail">Fail</option>
                         </select>
                         <button 
-                          onClick={() => completeSet(exerciseIndex, setIndex)}
+                          onClick={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            completeSet(exerciseIndex, setIndex);
+                          }}
                           disabled={isCompleted}
                           className={`p-1 rounded text-sm font-bold ${
                             isCompleted 
