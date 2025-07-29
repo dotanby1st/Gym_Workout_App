@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { useExercises } from '../hooks/useWorkouts';
-import { Plus, Dumbbell, Calendar, Target, Clock, Edit2, Trash2, Play, Check, History, BarChart3, User, Filter, LogOut } from 'lucide-react';
+import { Plus, Dumbbell, Calendar, Target, Clock, Edit2, Trash2, Play, Check, History, BarChart3, User, Filter, LogOut, Settings } from 'lucide-react';
 import toast from 'react-hot-toast';
 
 const WorkoutTracker = () => {
@@ -16,10 +16,9 @@ const WorkoutTracker = () => {
     {
       id: 1,
       name: 'Push Day',
-      weightUnit: 'kg',
       exercises: [
-        { exerciseId: 1, sets: 3, reps: '8-10' },
-        { exerciseId: 10, sets: 3, reps: '8-10' }
+        { exerciseId: 1, sets: 3, reps: '8-10', weightUnit: 'kg' },
+        { exerciseId: 10, sets: 3, reps: '8-10', weightUnit: 'lbs' }
       ]
     }
   ]);
@@ -30,9 +29,6 @@ const WorkoutTracker = () => {
   const [showNewExercise, setShowNewExercise] = useState(false);
   const [showNewMeasurement, setShowNewMeasurement] = useState(false);
   const [showNewTemplate, setShowNewTemplate] = useState(false);
-  const [showWeightUnitSelection, setShowWeightUnitSelection] = useState(false);
-  const [selectedTemplate, setSelectedTemplate] = useState(null);
-  const [selectedWeightUnit, setSelectedWeightUnit] = useState('kg');
   const [newTemplate, setNewTemplate] = useState({ name: '', exercises: [] });
   const [newExercise, setNewExercise] = useState({ name: '', category: '', equipment: '' });
   const [newMeasurement, setNewMeasurement] = useState({ type: '', value: '', date: new Date().toISOString().split('T')[0] });
@@ -85,7 +81,6 @@ const WorkoutTracker = () => {
       const template = {
         id: Date.now(),
         name: newTemplate.name,
-        weightUnit: 'kg', // Default unit
         exercises: newTemplate.exercises
       };
       setWorkoutTemplates([...workoutTemplates, template]);
@@ -95,12 +90,7 @@ const WorkoutTracker = () => {
     }
   };
 
-  const handleStartTemplate = (template) => {
-    setSelectedTemplate(template);
-    setShowWeightUnitSelection(true);
-  };
-
-  const startWorkout = (template, weightUnit) => {
+  const startWorkout = (template) => {
     const startTime = Date.now();
     setWorkoutStartTime(startTime);
     
@@ -108,21 +98,19 @@ const WorkoutTracker = () => {
       ...template,
       startTime: new Date(startTime),
       completedSets: {},
-      weightUnit: weightUnit,
       exercises: template.exercises.map((ex, index) => ({
         ...ex,
         actualSets: Array(ex.sets).fill(null).map(() => ({
           weight: '',
           reps: '',
-          rir: ''
+          rir: '',
+          completed: false
         }))
       }))
     };
     
     setCurrentWorkout(workout);
     setActiveTab('current');
-    setShowWeightUnitSelection(false);
-    setSelectedTemplate(null);
   };
 
   const updateSetData = (exerciseIndex, setIndex, field, value) => {
@@ -131,6 +119,30 @@ const WorkoutTracker = () => {
     const updatedWorkout = { ...currentWorkout };
     updatedWorkout.exercises[exerciseIndex].actualSets[setIndex][field] = value;
     setCurrentWorkout(updatedWorkout);
+  };
+
+  const toggleExerciseWeightUnit = (exerciseIndex) => {
+    if (!currentWorkout) return;
+    
+    const updatedWorkout = { ...currentWorkout };
+    const currentUnit = updatedWorkout.exercises[exerciseIndex].weightUnit;
+    updatedWorkout.exercises[exerciseIndex].weightUnit = currentUnit === 'kg' ? 'lbs' : 'kg';
+    setCurrentWorkout(updatedWorkout);
+  };
+
+  const completeSet = (exerciseIndex, setIndex) => {
+    if (!currentWorkout) return;
+    
+    const set = currentWorkout.exercises[exerciseIndex].actualSets[setIndex];
+    if (!set.weight || !set.reps || !set.rir) {
+      toast.error('Please fill in all fields before completing the set');
+      return;
+    }
+    
+    const updatedWorkout = { ...currentWorkout };
+    updatedWorkout.exercises[exerciseIndex].actualSets[setIndex].completed = true;
+    setCurrentWorkout(updatedWorkout);
+    toast.success('Set completed! 💪');
   };
 
   const finishWorkout = () => {
@@ -234,7 +246,7 @@ const WorkoutTracker = () => {
             <div className="flex justify-between items-start mb-3">
               <h3 className="font-semibold text-gray-800">{template.name}</h3>
               <button
-                onClick={() => handleStartTemplate(template)}
+                onClick={() => startWorkout(template)}
                 className="bg-green-500 hover:bg-green-600 text-white px-3 py-1 rounded flex items-center gap-1"
               >
                 <Play size={16} />
@@ -247,7 +259,7 @@ const WorkoutTracker = () => {
                 return (
                   <div key={`${template.id}-${idx}-${ex.exerciseId}`} className="text-sm text-gray-600 flex items-center gap-2">
                     <Target size={16} />
-                    <span>{exercise?.name || 'Unknown Exercise'}: {ex.sets} sets × {ex.reps} reps</span>
+                    <span>{exercise?.name || 'Unknown Exercise'}: {ex.sets} sets × {ex.reps} reps ({ex.weightUnit?.toUpperCase() || 'KG'})</span>
                   </div>
                 );
               })}
@@ -278,9 +290,6 @@ const WorkoutTracker = () => {
                 <Clock size={20} className="text-blue-600" />
                 <span className="text-blue-600">{formatDuration(workoutDuration)}</span>
               </div>
-              <div className="text-sm text-gray-600">
-                Unit: {currentWorkout.weightUnit.toUpperCase()}
-              </div>
             </div>
           </div>
         </div>
@@ -291,43 +300,71 @@ const WorkoutTracker = () => {
             
             return (
               <div key={`workout-current-exercise-${exerciseIndex}-${ex.exerciseId}`} className="bg-white p-4 rounded-lg border border-gray-200">
-                <h3 className="font-semibold text-gray-800 mb-3">{exercise?.name || 'Unknown Exercise'}</h3>
+                <div className="flex justify-between items-center mb-3">
+                  <h3 className="font-semibold text-gray-800">{exercise?.name || 'Unknown Exercise'}</h3>
+                  <button
+                    onClick={() => toggleExerciseWeightUnit(exerciseIndex)}
+                    className="flex items-center gap-1 px-2 py-1 bg-gray-100 hover:bg-gray-200 rounded text-sm font-medium"
+                  >
+                    <Settings size={14} />
+                    {ex.weightUnit?.toUpperCase() || 'KG'}
+                  </button>
+                </div>
                 <div className="space-y-2">
-                  {Array.from({ length: ex.sets }, (_, setIndex) => (
-                    <div key={`set-${exerciseIndex}-${setIndex}`} className="grid grid-cols-5 gap-2 p-2 bg-gray-50 rounded">
-                      <div className="flex items-center justify-center">
-                        <span className="text-sm font-medium">Set {setIndex + 1}</span>
+                  {Array.from({ length: ex.sets }, (_, setIndex) => {
+                    const set = ex.actualSets[setIndex];
+                    const isCompleted = set?.completed;
+                    
+                    return (
+                      <div key={`set-${exerciseIndex}-${setIndex}`} className={`grid grid-cols-5 gap-2 p-2 rounded ${isCompleted ? 'bg-green-50 border border-green-200' : 'bg-gray-50'}`}>
+                        <div className="flex items-center justify-center">
+                          <span className="text-sm font-medium">Set {setIndex + 1}</span>
+                        </div>
+                        <input
+                          type="text"
+                          inputMode="decimal"
+                          placeholder={`Weight (${ex.weightUnit || 'kg'})`}
+                          value={set?.weight || ''}
+                          onChange={(e) => updateSetData(exerciseIndex, setIndex, 'weight', e.target.value)}
+                          className="p-1 border border-gray-300 rounded text-sm"
+                          disabled={isCompleted}
+                        />
+                        <input
+                          type="text"
+                          inputMode="numeric"
+                          placeholder="Reps"
+                          value={set?.reps || ''}
+                          onChange={(e) => updateSetData(exerciseIndex, setIndex, 'reps', e.target.value)}
+                          className="p-1 border border-gray-300 rounded text-sm"
+                          disabled={isCompleted}
+                        />
+                        <select
+                          value={set?.rir || ''}
+                          onChange={(e) => updateSetData(exerciseIndex, setIndex, 'rir', e.target.value)}
+                          className="p-1 border border-gray-300 rounded text-sm"
+                          disabled={isCompleted}
+                        >
+                          <option value="">RIR</option>
+                          <option value="1">1</option>
+                          <option value="2">2</option>
+                          <option value="3">3</option>
+                          <option value="4">4</option>
+                          <option value="Fail">Fail</option>
+                        </select>
+                        <button 
+                          onClick={() => completeSet(exerciseIndex, setIndex)}
+                          disabled={isCompleted}
+                          className={`p-1 rounded text-sm font-bold ${
+                            isCompleted 
+                              ? 'bg-green-200 text-green-800 cursor-not-allowed' 
+                              : 'bg-gray-200 text-gray-700 hover:bg-green-200 hover:text-green-800'
+                          }`}
+                        >
+                          {isCompleted ? '✓' : '✓'}
+                        </button>
                       </div>
-                      <input
-                        type="number"
-                        step="0.5"
-                        placeholder={`Weight (${currentWorkout.weightUnit})`}
-                        value={ex.actualSets[setIndex]?.weight || ''}
-                        onChange={(e) => updateSetData(exerciseIndex, setIndex, 'weight', e.target.value)}
-                        className="p-1 border border-gray-300 rounded text-sm"
-                      />
-                      <input
-                        type="number"
-                        placeholder="Reps"
-                        value={ex.actualSets[setIndex]?.reps || ''}
-                        onChange={(e) => updateSetData(exerciseIndex, setIndex, 'reps', e.target.value)}
-                        className="p-1 border border-gray-300 rounded text-sm"
-                      />
-                      <input
-                        type="number"
-                        min="0"
-                        max="10"
-                        placeholder="RIR"
-                        value={ex.actualSets[setIndex]?.rir || ''}
-                        onChange={(e) => updateSetData(exerciseIndex, setIndex, 'rir', e.target.value)}
-                        className="p-1 border border-gray-300 rounded text-sm"
-                        title="Reps in Reserve (0-10)"
-                      />
-                      <button className="p-1 rounded text-sm bg-gray-200 text-gray-700 hover:bg-gray-300">
-                        ✓
-                      </button>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               </div>
             );
@@ -536,55 +573,6 @@ const WorkoutTracker = () => {
                 </button>
                 <button
                   onClick={() => setShowNewTemplate(false)}
-                  className="flex-1 bg-gray-300 hover:bg-gray-400 text-gray-700 py-2 rounded-lg"
-                >
-                  Cancel
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {showWeightUnitSelection && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white p-6 rounded-lg w-full max-w-md mx-4">
-            <h3 className="text-lg font-bold mb-4">Choose Weight Unit</h3>
-            <div className="space-y-4">
-              <div className="grid grid-cols-2 gap-4">
-                <button
-                  onClick={() => setSelectedWeightUnit('kg')}
-                  className={`p-4 rounded-lg border-2 font-medium ${
-                    selectedWeightUnit === 'kg' 
-                      ? 'border-blue-500 bg-blue-50 text-blue-700' 
-                      : 'border-gray-300 hover:border-gray-400'
-                  }`}
-                >
-                  Kilograms (KG)
-                </button>
-                <button
-                  onClick={() => setSelectedWeightUnit('lbs')}
-                  className={`p-4 rounded-lg border-2 font-medium ${
-                    selectedWeightUnit === 'lbs' 
-                      ? 'border-blue-500 bg-blue-50 text-blue-700' 
-                      : 'border-gray-300 hover:border-gray-400'
-                  }`}
-                >
-                  Pounds (LBS)
-                </button>
-              </div>
-              <div className="flex gap-2">
-                <button
-                  onClick={() => startWorkout(selectedTemplate, selectedWeightUnit)}
-                  className="flex-1 bg-green-500 hover:bg-green-600 text-white py-2 rounded-lg"
-                >
-                  Start Workout
-                </button>
-                <button
-                  onClick={() => {
-                    setShowWeightUnitSelection(false);
-                    setSelectedTemplate(null);
-                  }}
                   className="flex-1 bg-gray-300 hover:bg-gray-400 text-gray-700 py-2 rounded-lg"
                 >
                   Cancel
