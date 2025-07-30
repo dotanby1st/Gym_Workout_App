@@ -4,7 +4,6 @@ import { useExercises } from '../hooks/useWorkouts';
 import { Plus, Dumbbell, Calendar, Target, Clock, Edit2, Trash2, Play, Check, History, BarChart3, User, Filter, LogOut, Settings } from 'lucide-react';
 import toast from 'react-hot-toast';
 
-// Workout reducer to handle all workout state changes
 const workoutReducer = (state, action) => {
   switch (action.type) {
     case 'SET_WORKOUT':
@@ -45,7 +44,6 @@ const workoutReducer = (state, action) => {
   }
 };
 
-// Individual input component with stable props
 const WorkoutInput = React.memo(({ 
   exerciseIndex, 
   setIndex, 
@@ -81,7 +79,6 @@ const WorkoutInput = React.memo(({
   );
 });
 
-// Individual select component
 const WorkoutSelect = React.memo(({ 
   exerciseIndex, 
   setIndex, 
@@ -121,11 +118,7 @@ const WorkoutTracker = () => {
   const [activeTab, setActiveTab] = useState('workouts');
   const [workoutStartTime, setWorkoutStartTime] = useState(null);
   const [workoutDuration, setWorkoutDuration] = useState(0);
-
-  // Use reducer for workout state
   const [currentWorkout, dispatch] = useReducer(workoutReducer, null);
-
-  // Use localStorage for persistence
   const [workoutTemplates, setWorkoutTemplates] = useState(() => {
     try {
       const saved = localStorage.getItem('workoutTemplates');
@@ -179,7 +172,6 @@ const WorkoutTracker = () => {
   const [newMeasurement, setNewMeasurement] = useState({ type: '', value: '', date: new Date().toISOString().split('T')[0] });
   const [selectedExerciseHistory, setSelectedExerciseHistory] = useState(null);
 
-  // RIR options - stable reference
   const rirOptions = useMemo(() => [
     { value: '', label: 'RIR' },
     { value: '1', label: '1' },
@@ -189,7 +181,6 @@ const WorkoutTracker = () => {
     { value: 'Fail', label: 'Fail' }
   ], []);
 
-  // Save to localStorage whenever state changes
   useEffect(() => {
     try {
       localStorage.setItem('workoutTemplates', JSON.stringify(workoutTemplates));
@@ -214,7 +205,6 @@ const WorkoutTracker = () => {
     }
   }, [measurements]);
 
-  // Timer effect for workout duration
   useEffect(() => {
     let interval;
     if (workoutStartTime) {
@@ -338,7 +328,6 @@ const WorkoutTracker = () => {
     toast.success('Set completed! 💪');
   }, [currentWorkout]);
 
-  // Group exercises by category
   const exercisesByCategory = useMemo(() => {
     return exercises.reduce((acc, exercise) => {
       if (!acc[exercise.category]) {
@@ -348,7 +337,6 @@ const WorkoutTracker = () => {
       return acc;
     }, {});
   }, [exercises]);
-
   const ExerciseList = () => (
     <div className="space-y-4">
       <div className="flex justify-between items-center">
@@ -670,90 +658,6 @@ const WorkoutTracker = () => {
       {showNewExercise && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
           <div className="bg-white p-6 rounded-lg w-full max-w-md mx-4">
-            <h3 className="text-lg font-bold mb-4">Create New Template</h3>
-            <div className="space-y-4">
-              <input
-                type="text"
-                placeholder="Template name"
-                value={newTemplate.name}
-                onChange={(e) => setNewTemplate({...newTemplate, name: e.target.value})}
-                className="w-full p-3 border border-gray-300 rounded-lg"
-              />
-              <p className="text-sm text-gray-600">Template will be created with default exercises.</p>
-              <div className="flex gap-2">
-                <button
-                  onClick={handleCreateTemplate}
-                  className="flex-1 bg-blue-500 hover:bg-blue-600 text-white py-2 rounded-lg"
-                >
-                  Create Template
-                </button>
-                <button
-                  onClick={() => setShowNewTemplate(false)}
-                  className="flex-1 bg-gray-300 hover:bg-gray-400 text-gray-700 py-2 rounded-lg"
-                >
-                  Cancel
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {showNewMeasurement && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white p-6 rounded-lg w-full max-w-md mx-4">
-            <h3 className="text-lg font-bold mb-4">Add Measurement</h3>
-            <div className="space-y-4">
-              <select
-                value={newMeasurement.type}
-                onChange={(e) => setNewMeasurement({...newMeasurement, type: e.target.value})}
-                className="w-full p-3 border border-gray-300 rounded-lg"
-              >
-                <option value="">Select measurement type</option>
-                <option value="Body Weight">Body Weight (kg)</option>
-                <option value="Waist">Waist Circumference (cm)</option>
-                <option value="Chest">Chest Circumference (cm)</option>
-                <option value="Arms">Arm Circumference (cm)</option>
-                <option value="Thighs">Thigh Circumference (cm)</option>
-              </select>
-              <input
-                type="number"
-                step="0.1"
-                placeholder="Value"
-                value={newMeasurement.value}
-                onChange={(e) => setNewMeasurement({...newMeasurement, value: e.target.value})}
-                className="w-full p-3 border border-gray-300 rounded-lg"
-              />
-              <input
-                type="date"
-                value={newMeasurement.date}
-                onChange={(e) => setNewMeasurement({...newMeasurement, date: e.target.value})}
-                className="w-full p-3 border border-gray-300 rounded-lg"
-              />
-              <div className="flex gap-2">
-                <button
-                  onClick={handleAddMeasurement}
-                  className="flex-1 bg-blue-500 hover:bg-blue-600 text-white py-2 rounded-lg"
-                >
-                  Add Measurement
-                </button>
-                <button
-                  onClick={() => setShowNewMeasurement(false)}
-                  className="flex-1 bg-gray-300 hover:bg-gray-400 text-gray-700 py-2 rounded-lg"
-                >
-                  Cancel
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-    </div>
-  );
-};
-
-export default WorkoutTracker;
-          <div className="bg-white p-6 rounded-lg w-full max-w-md mx-4">
             <h3 className="text-lg font-bold mb-4">Create Custom Exercise</h3>
             <div className="space-y-4">
               <input
@@ -809,8 +713,6 @@ export default WorkoutTracker;
 
       {showNewTemplate && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          {showNewTemplate && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
           <div className="bg-white p-6 rounded-lg w-full max-w-md mx-4">
             <h3 className="text-lg font-bold mb-4">Create New Template</h3>
             <div className="space-y-4">
@@ -840,6 +742,7 @@ export default WorkoutTracker;
           </div>
         </div>
       )}
+
       {showNewMeasurement && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
           <div className="bg-white p-6 rounded-lg w-full max-w-md mx-4">
