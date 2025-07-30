@@ -1,47 +1,116 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useReducer, useRef } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { useExercises } from '../hooks/useWorkouts';
 import { Plus, Dumbbell, Calendar, Target, Clock, Edit2, Trash2, Play, Check, History, BarChart3, User, Filter, LogOut, Settings } from 'lucide-react';
 import toast from 'react-hot-toast';
 
-// Separate component for individual input to prevent re-renders
-const SetInput = React.memo(({ 
+// Workout reducer to handle all workout state changes
+const workoutReducer = (state, action) => {
+  switch (action.type) {
+    case 'SET_WORKOUT':
+      return action.payload;
+    case 'UPDATE_SET':
+      const { exerciseIndex, setIndex, field, value } = action.payload;
+      const newState = { ...state };
+      newState.exercises = [...state.exercises];
+      newState.exercises[exerciseIndex] = { ...state.exercises[exerciseIndex] };
+      newState.exercises[exerciseIndex].actualSets = [...state.exercises[exerciseIndex].actualSets];
+      newState.exercises[exerciseIndex].actualSets[setIndex] = {
+        ...state.exercises[exerciseIndex].actualSets[setIndex],
+        [field]: value
+      };
+      return newState;
+    case 'TOGGLE_WEIGHT_UNIT':
+      const toggleState = { ...state };
+      toggleState.exercises = [...state.exercises];
+      toggleState.exercises[action.payload] = { ...state.exercises[action.payload] };
+      const currentUnit = toggleState.exercises[action.payload].weightUnit;
+      toggleState.exercises[action.payload].weightUnit = currentUnit === 'kg' ? 'lbs' : 'kg';
+      return toggleState;
+    case 'COMPLETE_SET':
+      const { exerciseIndex: exIdx, setIndex: sIdx } = action.payload;
+      const completeState = { ...state };
+      completeState.exercises = [...state.exercises];
+      completeState.exercises[exIdx] = { ...state.exercises[exIdx] };
+      completeState.exercises[exIdx].actualSets = [...state.exercises[exIdx].actualSets];
+      completeState.exercises[exIdx].actualSets[sIdx] = {
+        ...state.exercises[exIdx].actualSets[sIdx],
+        completed: true
+      };
+      return completeState;
+    case 'CLEAR_WORKOUT':
+      return null;
+    default:
+      return state;
+  }
+};
+
+// Individual input component with stable props
+const WorkoutInput = React.memo(({ 
+  exerciseIndex, 
+  setIndex, 
+  field, 
   type, 
   inputMode, 
   placeholder, 
   value, 
-  onChange, 
   disabled, 
-  className 
+  dispatch,
+  className = "p-1 border border-gray-300 rounded text-sm focus:outline-none focus:ring-1 focus:ring-blue-500"
 }) => {
+  const inputRef = useRef(null);
+  
+  const handleChange = useCallback((e) => {
+    dispatch({
+      type: 'UPDATE_SET',
+      payload: { exerciseIndex, setIndex, field, value: e.target.value }
+    });
+  }, [dispatch, exerciseIndex, setIndex, field]);
+
   return (
     <input
+      ref={inputRef}
       type={type}
       inputMode={inputMode}
       placeholder={placeholder}
       value={value}
-      onChange={onChange}
+      onChange={handleChange}
       disabled={disabled}
       className={className}
     />
   );
 });
 
-// Separate component for RIR select
-const RIRSelect = React.memo(({ value, onChange, disabled, className }) => {
+// Individual select component
+const WorkoutSelect = React.memo(({ 
+  exerciseIndex, 
+  setIndex, 
+  field, 
+  value, 
+  disabled, 
+  dispatch,
+  options,
+  className = "p-1 border border-gray-300 rounded text-sm focus:outline-none focus:ring-1 focus:ring-blue-500"
+}) => {
+  const handleChange = useCallback((e) => {
+    dispatch({
+      type: 'UPDATE_SET',
+      payload: { exerciseIndex, setIndex, field, value: e.target.value }
+    });
+  }, [dispatch, exerciseIndex, setIndex, field]);
+
   return (
     <select
       value={value}
-      onChange={onChange}
+      onChange={handleChange}
       disabled={disabled}
       className={className}
     >
-      <option value="">RIR</option>
-      <option value="1">1</option>
-      <option value="2">2</option>
-      <option value="3">3</option>
-      <option value="4">4</option>
-      <option value="Fail">Fail</option>
+      {options.map(option => (
+        <option key={option.value} value={option.value}>
+          {option.label}
+        </option>
+      ))}
     </select>
   );
 });
@@ -52,6 +121,9 @@ const WorkoutTracker = () => {
   const [activeTab, setActiveTab] = useState('workouts');
   const [workoutStartTime, setWorkoutStartTime] = useState(null);
   const [workoutDuration, setWorkoutDuration] = useState(0);
+
+  // Use reducer for workout state
+  const [currentWorkout, dispatch] = useReducer(workoutReducer, null);
 
   // Use localStorage for persistence
   const [workoutTemplates, setWorkoutTemplates] = useState(() => {
@@ -99,7 +171,6 @@ const WorkoutTracker = () => {
     }
   });
   
-  const [currentWorkout, setCurrentWorkout] = useState(null);
   const [showNewExercise, setShowNewExercise] = useState(false);
   const [showNewMeasurement, setShowNewMeasurement] = useState(false);
   const [showNewTemplate, setShowNewTemplate] = useState(false);
@@ -107,6 +178,16 @@ const WorkoutTracker = () => {
   const [newExercise, setNewExercise] = useState({ name: '', category: '', equipment: '' });
   const [newMeasurement, setNewMeasurement] = useState({ type: '', value: '', date: new Date().toISOString().split('T')[0] });
   const [selectedExerciseHistory, setSelectedExerciseHistory] = useState(null);
+
+  // RIR options - stable reference
+  const rirOptions = useMemo(() => [
+    { value: '', label: 'RIR' },
+    { value: '1', label: '1' },
+    { value: '2', label: '2' },
+    { value: '3', label: '3' },
+    { value: '4', label: '4' },
+    { value: 'Fail', label: 'Fail' }
+  ], []);
 
   // Save to localStorage whenever state changes
   useEffect(() => {
@@ -194,7 +275,7 @@ const WorkoutTracker = () => {
     }
   };
 
-  const startWorkout = (template) => {
+  const startWorkout = useCallback((template) => {
     const startTime = Date.now();
     setWorkoutStartTime(startTime);
     
@@ -213,11 +294,11 @@ const WorkoutTracker = () => {
       }))
     };
     
-    setCurrentWorkout(workout);
+    dispatch({ type: 'SET_WORKOUT', payload: workout });
     setActiveTab('current');
-  };
+  }, []);
 
-  const finishWorkout = () => {
+  const finishWorkout = useCallback(() => {
     if (currentWorkout) {
       const completedWorkout = {
         ...currentWorkout,
@@ -229,16 +310,33 @@ const WorkoutTracker = () => {
       toast.success('Workout completed! 💪');
     }
     
-    setCurrentWorkout(null);
+    dispatch({ type: 'CLEAR_WORKOUT' });
     setWorkoutStartTime(null);
     setWorkoutDuration(0);
     setActiveTab('workouts');
-  };
+  }, [currentWorkout, workoutDuration]);
 
   const handleSignOut = async () => {
     await signOut();
     toast.success('Signed out successfully!');
   };
+
+  const toggleExerciseWeightUnit = useCallback((exerciseIndex) => {
+    dispatch({ type: 'TOGGLE_WEIGHT_UNIT', payload: exerciseIndex });
+  }, []);
+
+  const completeSet = useCallback((exerciseIndex, setIndex) => {
+    if (!currentWorkout) return;
+    
+    const set = currentWorkout.exercises[exerciseIndex].actualSets[setIndex];
+    if (!set?.weight || !set?.reps || !set?.rir) {
+      toast.error('Please fill in all fields before completing the set');
+      return;
+    }
+    
+    dispatch({ type: 'COMPLETE_SET', payload: { exerciseIndex, setIndex } });
+    toast.success('Set completed! 💪');
+  }, [currentWorkout]);
 
   // Group exercises by category
   const exercisesByCategory = useMemo(() => {
@@ -352,52 +450,6 @@ const WorkoutTracker = () => {
       );
     }
 
-    const updateSetData = (exerciseIndex, setIndex, field, value) => {
-      setCurrentWorkout(prev => {
-        const updated = { ...prev };
-        updated.exercises = [...prev.exercises];
-        updated.exercises[exerciseIndex] = { ...prev.exercises[exerciseIndex] };
-        updated.exercises[exerciseIndex].actualSets = [...prev.exercises[exerciseIndex].actualSets];
-        updated.exercises[exerciseIndex].actualSets[setIndex] = {
-          ...prev.exercises[exerciseIndex].actualSets[setIndex],
-          [field]: value
-        };
-        return updated;
-      });
-    };
-
-    const toggleExerciseWeightUnit = (exerciseIndex) => {
-      setCurrentWorkout(prev => {
-        const updated = { ...prev };
-        updated.exercises = [...prev.exercises];
-        updated.exercises[exerciseIndex] = { ...prev.exercises[exerciseIndex] };
-        const currentUnit = updated.exercises[exerciseIndex].weightUnit;
-        updated.exercises[exerciseIndex].weightUnit = currentUnit === 'kg' ? 'lbs' : 'kg';
-        return updated;
-      });
-    };
-
-    const completeSet = (exerciseIndex, setIndex) => {
-      const set = currentWorkout.exercises[exerciseIndex].actualSets[setIndex];
-      if (!set?.weight || !set?.reps || !set?.rir) {
-        toast.error('Please fill in all fields before completing the set');
-        return;
-      }
-      
-      setCurrentWorkout(prev => {
-        const updated = { ...prev };
-        updated.exercises = [...prev.exercises];
-        updated.exercises[exerciseIndex] = { ...prev.exercises[exerciseIndex] };
-        updated.exercises[exerciseIndex].actualSets = [...prev.exercises[exerciseIndex].actualSets];
-        updated.exercises[exerciseIndex].actualSets[setIndex] = {
-          ...prev.exercises[exerciseIndex].actualSets[setIndex],
-          completed: true
-        };
-        return updated;
-      });
-      toast.success('Set completed! 💪');
-    };
-
     return (
       <div className="space-y-4">
         <div className="bg-white p-4 rounded-lg border border-gray-200">
@@ -439,31 +491,38 @@ const WorkoutTracker = () => {
                           <span className="text-sm font-medium">Set {setIndex + 1}</span>
                         </div>
                         
-                        <SetInput
+                        <WorkoutInput
+                          exerciseIndex={exerciseIndex}
+                          setIndex={setIndex}
+                          field="weight"
                           type="text"
                           inputMode="decimal"
                           placeholder={`Weight (${ex.weightUnit || 'kg'})`}
                           value={set.weight}
-                          onChange={(e) => updateSetData(exerciseIndex, setIndex, 'weight', e.target.value)}
                           disabled={isCompleted}
-                          className="p-1 border border-gray-300 rounded text-sm focus:outline-none focus:ring-1 focus:ring-blue-500"
+                          dispatch={dispatch}
                         />
                         
-                        <SetInput
+                        <WorkoutInput
+                          exerciseIndex={exerciseIndex}
+                          setIndex={setIndex}
+                          field="reps"
                           type="text"
                           inputMode="numeric"
                           placeholder="Reps"
                           value={set.reps}
-                          onChange={(e) => updateSetData(exerciseIndex, setIndex, 'reps', e.target.value)}
                           disabled={isCompleted}
-                          className="p-1 border border-gray-300 rounded text-sm focus:outline-none focus:ring-1 focus:ring-blue-500"
+                          dispatch={dispatch}
                         />
                         
-                        <RIRSelect
+                        <WorkoutSelect
+                          exerciseIndex={exerciseIndex}
+                          setIndex={setIndex}
+                          field="rir"
                           value={set.rir}
-                          onChange={(e) => updateSetData(exerciseIndex, setIndex, 'rir', e.target.value)}
                           disabled={isCompleted}
-                          className="p-1 border border-gray-300 rounded text-sm focus:outline-none focus:ring-1 focus:ring-blue-500"
+                          dispatch={dispatch}
+                          options={rirOptions}
                         />
                         
                         <button 
@@ -611,6 +670,90 @@ const WorkoutTracker = () => {
       {showNewExercise && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
           <div className="bg-white p-6 rounded-lg w-full max-w-md mx-4">
+            <h3 className="text-lg font-bold mb-4">Create New Template</h3>
+            <div className="space-y-4">
+              <input
+                type="text"
+                placeholder="Template name"
+                value={newTemplate.name}
+                onChange={(e) => setNewTemplate({...newTemplate, name: e.target.value})}
+                className="w-full p-3 border border-gray-300 rounded-lg"
+              />
+              <p className="text-sm text-gray-600">Template will be created with default exercises.</p>
+              <div className="flex gap-2">
+                <button
+                  onClick={handleCreateTemplate}
+                  className="flex-1 bg-blue-500 hover:bg-blue-600 text-white py-2 rounded-lg"
+                >
+                  Create Template
+                </button>
+                <button
+                  onClick={() => setShowNewTemplate(false)}
+                  className="flex-1 bg-gray-300 hover:bg-gray-400 text-gray-700 py-2 rounded-lg"
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showNewMeasurement && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white p-6 rounded-lg w-full max-w-md mx-4">
+            <h3 className="text-lg font-bold mb-4">Add Measurement</h3>
+            <div className="space-y-4">
+              <select
+                value={newMeasurement.type}
+                onChange={(e) => setNewMeasurement({...newMeasurement, type: e.target.value})}
+                className="w-full p-3 border border-gray-300 rounded-lg"
+              >
+                <option value="">Select measurement type</option>
+                <option value="Body Weight">Body Weight (kg)</option>
+                <option value="Waist">Waist Circumference (cm)</option>
+                <option value="Chest">Chest Circumference (cm)</option>
+                <option value="Arms">Arm Circumference (cm)</option>
+                <option value="Thighs">Thigh Circumference (cm)</option>
+              </select>
+              <input
+                type="number"
+                step="0.1"
+                placeholder="Value"
+                value={newMeasurement.value}
+                onChange={(e) => setNewMeasurement({...newMeasurement, value: e.target.value})}
+                className="w-full p-3 border border-gray-300 rounded-lg"
+              />
+              <input
+                type="date"
+                value={newMeasurement.date}
+                onChange={(e) => setNewMeasurement({...newMeasurement, date: e.target.value})}
+                className="w-full p-3 border border-gray-300 rounded-lg"
+              />
+              <div className="flex gap-2">
+                <button
+                  onClick={handleAddMeasurement}
+                  className="flex-1 bg-blue-500 hover:bg-blue-600 text-white py-2 rounded-lg"
+                >
+                  Add Measurement
+                </button>
+                <button
+                  onClick={() => setShowNewMeasurement(false)}
+                  className="flex-1 bg-gray-300 hover:bg-gray-400 text-gray-700 py-2 rounded-lg"
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
+export default WorkoutTracker;
+          <div className="bg-white p-6 rounded-lg w-full max-w-md mx-4">
             <h3 className="text-lg font-bold mb-4">Create Custom Exercise</h3>
             <div className="space-y-4">
               <input
@@ -666,6 +809,8 @@ const WorkoutTracker = () => {
 
       {showNewTemplate && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          {showNewTemplate && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
           <div className="bg-white p-6 rounded-lg w-full max-w-md mx-4">
             <h3 className="text-lg font-bold mb-4">Create New Template</h3>
             <div className="space-y-4">
@@ -695,7 +840,6 @@ const WorkoutTracker = () => {
           </div>
         </div>
       )}
-
       {showNewMeasurement && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
           <div className="bg-white p-6 rounded-lg w-full max-w-md mx-4">
