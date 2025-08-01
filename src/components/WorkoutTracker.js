@@ -1,8 +1,161 @@
 import React, { useState, useEffect, useCallback, useMemo, useReducer, useRef } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { useExercises } from '../hooks/useWorkouts';
-import { Plus, Target, Clock, Edit2, Trash2, Play, Check, History, BarChart3, User, LogOut, Settings } from 'lucide-react';
+import { Plus, Target, Clock, Edit2, Trash2, Play, Check, History, BarChart3, User, LogOut, Settings, Search, X } from 'lucide-react';
 import toast from 'react-hot-toast';
+
+// Complete exercise directory from the document
+const EXERCISE_DIRECTORY = {
+  "Abdominal": {
+    "Bodyweight": [
+      "Bicycle Crunch", "Copenhagen Plank", "Core Twist", "Crunch", "Dead Bug", "Dragon Flag",
+      "Hanging Knee Raise", "Hanging Leg Raise", "Hanging Sit-Up", "Hanging Windshield Wiper",
+      "Hollow Body Crunch", "Hollow Hold", "Jackknife Sit-Up", "Kneeling Ab Wheel Roll-Out",
+      "Kneeling Plank", "Kneeling Side Plank", "L-Sit", "Lying Leg Raise", "Lying Windshield Wiper",
+      "Lying Windshield Wiper with Bent Knees", "Mountain Climbers", "Oblique Crunch", "Oblique Sit-Up",
+      "Plank", "Side Plank", "Sit-Up"
+    ],
+    "Cable": ["Cable Crunch"],
+    "Machine": ["Machine Crunch"]
+  },
+  "Back": {
+    "Barbell": ["Barbell Row", "Barbell Shrug", "Seal Row"],
+    "Bodyweight": [
+      "Assisted Muscle Up", "Assisted Pull Up", "Inverted Row", "Muscle Up", "Pull Up",
+      "Superman Raise", "Weighted Muscle Up", "Weighted Pull Up"
+    ],
+    "Cable": [
+      "Cable Close Grip Seated Row", "Cable Wide Grip Seated Row", "Close Grip Lat Pulldown",
+      "One Handed Cable Row", "One Handed Lat Pulldown", "Straight Arm Lat Pullover",
+      "Wide Grip Lat Pulldown"
+    ],
+    "Dumbbell": ["Dumbbell Row", "Dumbbell Shrug", "Dumbbell Single Hand Row"],
+    "Machine": ["Seated Machine Row"]
+  },
+  "Bicep": {
+    "Barbell": ["Barbell Curl", "Barbell Preacher Curl"],
+    "Cable": [
+      "Bayesian Curl", "Cable Curl With Bar", "Cable Hammer Curl (Rope)", "One Hand Bayesian Curl"
+    ],
+    "Dumbbell": [
+      "Dumbbell Curl", "Dumbbell Lying Curl", "Dumbbell Preacher Curl", "Hammer Curl",
+      "Seated Dumbbell Curl", "Spider Curl", "Zottman Curl"
+    ],
+    "Machine": ["Machine Bicep Curl"]
+  },
+  "Calf": {
+    "Barbell": ["Barbell Seated Calf Raise", "Barbell Standing Calf Raise"],
+    "Machine": [
+      "Machine Calf Raise", "Machine Donkey Calf Raise", "Machine Seated Calf Raise",
+      "Machine Standing Calf Raise"
+    ]
+  },
+  "Chest": {
+    "Barbell": [
+      "Decline Barbell Bench Press", "Flat Barbell Bench Press", "Incline Barbell Bench Press"
+    ],
+    "Bodyweight": [
+      "Assisted Chest Dip", "Chest Dip", "Decline Push-Up", "Incline Push-Up", "Push-Up",
+      "Weighted Chest Dip"
+    ],
+    "Cable": ["Cable Chest Fly", "Cable Chest Press", "Seated Cable Chest Fly"],
+    "Dumbbell": [
+      "Decline Dumbbell Chest Press", "Dumbbell Chest Fly", "Flat Dumbbell Chest Press",
+      "Incline Dumbbell Chest Press"
+    ],
+    "Machine": [
+      "Machine Chest Fly", "Machine Chest Press", "Pec Deck", "Smith Machine Decline Bench Press",
+      "Smith Machine Flat Bench Press", "Smith Machine Incline Bench Press"
+    ]
+  },
+  "Forearm & Grip": {
+    "Barbell": [
+      "Barbell Wrist Curl", "Barbell Wrist Curl Behind the Back", "Barbell Wrist Extension"
+    ],
+    "Bodyweight": ["Bar Hang"],
+    "Cable": ["Cable Wrist Curl", "Cable Wrist Extension", "Reverse Grip Curl"],
+    "Dumbbell": ["Dumbbell Wrist Curl", "Dumbbell Wrist Extension", "Reverse Grip Curl"]
+  },
+  "Legs & Glutes": {
+    "Barbell": [
+      "Back Squat", "Barbell Deadlift", "Barbell Lunge", "Barbell Stiff Legged Deadlift",
+      "Barbell Walking Lunge", "Front Squat", "Pause Squat", "Sumo Squat", "Zercher Squat"
+    ],
+    "Bodyweight": [
+      "Body Weight Lunge", "Box Jump", "Box Squat", "Bulgarian Split Squat", "Jumping Lunge",
+      "Nordic Curl", "Pistol Squat", "Step Up"
+    ],
+    "Cable": ["Cable Kick Back", "Cable Step Up"],
+    "Dumbbell": [
+      "Dumbbell Deadlift", "Dumbbell Lunge", "Dumbbell Squat", "Dumbbell Stiff Legged Deadlift",
+      "Dumbbell Walking Lunge"
+    ],
+    "Machine": [
+      "Hack Squat Machine", "Hip Abduction Machine", "Hip Adduction Machine", "Leg Extension",
+      "Leg Press", "Lying Leg Curl", "One-Legged Leg Extension", "One-Legged Lying Leg Curl",
+      "One-Legged Seated Leg Curl"
+    ],
+    "Resistance Band": ["Hip Adduction Against Band"]
+  },
+  "Shoulder": {
+    "Barbell": [
+      "Barbell Behind the Neck Overhead Press", "Barbell Front Raise", "Barbell Upright Row",
+      "Jerk", "Overhead Press", "Push Press"
+    ],
+    "Bodyweight": ["Handstand Push Ups"],
+    "Cable": [
+      "Cable External Shoulder Rotation", "Cable Front Raise", "Cable Internal Shoulder Rotation",
+      "Cable Lateral Raise", "Cable Single Hand Front Raise", "Cable Single Hand Lateral Raise",
+      "Face Pull", "Standing Rear Delt Cable Crossover"
+    ],
+    "Dumbbell": [
+      "Arnold Press", "Dumbbell Front Raise", "Dumbbell Lateral Raise", "Dumbbell Rear Delt Row",
+      "Dumbbell Reverse Flyes", "Dumbbell Shoulder Press", "Seated Dumbbell Front Raise",
+      "Seated Dumbbell Shoulder Press", "Seated Lateral Raise"
+    ],
+    "Machine": [
+      "Machine Lateral Raise", "Machine Reverse Fly", "Machine Shoulder Press",
+      "Machine Single Hand Reverse Fly", "Seated Smith Machine Shoulder Press"
+    ],
+    "Other Equipment": ["Plate Front Raise"],
+    "Resistance Band": ["Band External Shoulder Rotation", "Band Internal Shoulder Rotation"]
+  },
+  "Triceps": {
+    "Barbell": [
+      "Barbell Lying Triceps Extension", "Barbell Seated Triceps Extension",
+      "Barbell Standing Triceps Extension", "Close Grip"
+    ],
+    "Bodyweight": ["Assisted Tricep Dip", "Diamond Push-Up", "Tricep Dip"],
+    "Cable": [
+      "Crossbody Cable Triceps Extension", "Overhead Cable Triceps Extension",
+      "Single Hand Tricep Pushdown", "Tricep Pushdown With Bar", "Tricep Pushdown With Rope"
+    ],
+    "Dumbbell": ["Dumbbell Lying Triceps Extension", "Dumbbell Standing Triceps Extension"]
+  }
+};
+
+// Flatten exercise directory for easy searching
+const getAllExercises = () => {
+  const exercises = [];
+  let id = 1;
+  
+  Object.entries(EXERCISE_DIRECTORY).forEach(([category, equipmentTypes]) => {
+    Object.entries(equipmentTypes).forEach(([equipment, exerciseList]) => {
+      exerciseList.forEach(exerciseName => {
+        exercises.push({
+          id: id++,
+          name: exerciseName,
+          category: category,
+          equipment: equipment,
+          is_custom: false,
+          user_id: null
+        });
+      });
+    });
+  });
+  
+  return exercises;
+};
 
 const workoutReducer = (state, action) => {
   switch (action.type) {
@@ -149,39 +302,29 @@ const WorkoutSelect = React.memo(({
 });
 
 const WorkoutTracker = () => {
-  const { user, signOut } = useAuth();
+  const { signOut } = useAuth();
   const { exercises, loading: exercisesLoading, addExercise } = useExercises();
+  
+  // Combine built-in exercises with custom exercises
+  const allExercises = useMemo(() => {
+    const builtInExercises = getAllExercises();
+    const customExercises = exercises.filter(ex => ex.is_custom);
+    return [...builtInExercises, ...customExercises];
+  }, [exercises]);
+
+  const [currentWorkout, dispatch] = useReducer(workoutReducer, null);
   const [activeTab, setActiveTab] = useState('templates');
   const [workoutStartTime, setWorkoutStartTime] = useState(null);
   const [workoutDuration, setWorkoutDuration] = useState(0);
-  const [currentWorkout, dispatch] = useReducer(workoutReducer, null);
-  
+
   // Initialize workout templates with error handling
   const [workoutTemplates, setWorkoutTemplates] = useState(() => {
     try {
       const saved = localStorage.getItem('workoutTemplates');
-      return saved ? JSON.parse(saved) : [
-        {
-          id: 1,
-          name: 'Push Day',
-          exercises: [
-            { exerciseId: 1, sets: 3, reps: '8-10', weightUnit: 'kg' },
-            { exerciseId: 2, sets: 3, reps: '8-10', weightUnit: 'kg' }
-          ]
-        }
-      ];
+      return saved ? JSON.parse(saved) : [];
     } catch (error) {
       console.error('Failed to load workout templates:', error);
-      return [
-        {
-          id: 1,
-          name: 'Push Day',
-          exercises: [
-            { exerciseId: 1, sets: 3, reps: '8-10', weightUnit: 'kg' },
-            { exerciseId: 2, sets: 3, reps: '8-10', weightUnit: 'kg' }
-          ]
-        }
-      ];
+      return [];
     }
   });
   
@@ -221,6 +364,33 @@ const WorkoutTracker = () => {
   const [currentTime, setCurrentTime] = useState(new Date());
   const [editingTemplate, setEditingTemplate] = useState(null);
   const [showTemplateEditor, setShowTemplateEditor] = useState(false);
+  
+  // Search functionality
+  const [exerciseSearchTerm, setExerciseSearchTerm] = useState('');
+  const [selectedCategory, setSelectedCategory] = useState('');
+  const [selectedEquipment, setSelectedEquipment] = useState('');
+
+  // Get unique categories and equipment for filters
+  const categories = useMemo(() => {
+    const cats = [...new Set(allExercises.map(ex => ex.category))].sort();
+    return cats;
+  }, [allExercises]);
+
+  const equipmentTypes = useMemo(() => {
+    const equipment = [...new Set(allExercises.map(ex => ex.equipment))].sort();
+    return equipment;
+  }, [allExercises]);
+
+  // Filter exercises based on search criteria
+  const filteredExercises = useMemo(() => {
+    return allExercises.filter(exercise => {
+      const matchesSearch = exercise.name.toLowerCase().includes(exerciseSearchTerm.toLowerCase());
+      const matchesCategory = !selectedCategory || exercise.category === selectedCategory;
+      const matchesEquipment = !selectedEquipment || exercise.equipment === selectedEquipment;
+      
+      return matchesSearch && matchesCategory && matchesEquipment;
+    });
+  }, [allExercises, exerciseSearchTerm, selectedCategory, selectedEquipment]);
 
   // RIR options with proper structure
   const rirOptions = useMemo(() => [
@@ -229,8 +399,7 @@ const WorkoutTracker = () => {
     { value: '1', label: '1 RIR' },
     { value: '2', label: '2 RIR' },
     { value: '3', label: '3 RIR' },
-    { value: '4', label: '4 RIR' },
-    { value: '5+', label: '5+ RIR' }
+    { value: '4+', label: '4+ RIR' }
   ], []);
 
   // Update current time every second
@@ -268,29 +437,30 @@ const WorkoutTracker = () => {
     }
   }, [measurements]);
 
-  // Auto-save current workout to localStorage
+  // Save current workout to localStorage
   useEffect(() => {
-    if (currentWorkout) {
-      try {
-        localStorage.setItem('currentWorkout', JSON.stringify({
-          workout: currentWorkout,
-          startTime: workoutStartTime
-        }));
-      } catch (error) {
-        console.error('Failed to save current workout:', error);
+    try {
+      if (currentWorkout) {
+        localStorage.setItem('currentWorkout', JSON.stringify(currentWorkout));
+        localStorage.setItem('workoutStartTime', workoutStartTime?.toString() || '');
+      } else {
+        localStorage.removeItem('currentWorkout');
+        localStorage.removeItem('workoutStartTime');
       }
-    } else {
-      localStorage.removeItem('currentWorkout');
+    } catch (error) {
+      console.error('Failed to save current workout:', error);
     }
   }, [currentWorkout, workoutStartTime]);
 
-  // Load saved workout on mount
+  // Load saved workout on component mount
   useEffect(() => {
     try {
-      const saved = localStorage.getItem('currentWorkout');
-      if (saved) {
-        const { workout, startTime } = JSON.parse(saved);
-        dispatch({ type: 'SET_WORKOUT', payload: workout });
+      const savedWorkout = localStorage.getItem('currentWorkout');
+      const savedStartTime = localStorage.getItem('workoutStartTime');
+      
+      if (savedWorkout && savedStartTime) {
+        dispatch({ type: 'SET_WORKOUT', payload: JSON.parse(savedWorkout) });
+        const startTime = parseInt(savedStartTime);
         setWorkoutStartTime(startTime);
         if (startTime) {
           setWorkoutDuration(Math.floor((Date.now() - startTime) / 1000));
@@ -333,6 +503,51 @@ const WorkoutTracker = () => {
     });
   }, [currentTime]);
 
+  // Clear search filters
+  const clearFilters = () => {
+    setExerciseSearchTerm('');
+    setSelectedCategory('');
+    setSelectedEquipment('');
+  };
+
+  // Rest of the component methods remain the same...
+  // [Previous methods: handleAddExercise, handleAddMeasurement, handleCreateTemplate, etc.]
+
+  // Calculate workout stats with proper error handling
+  const calculateWorkoutStats = useCallback((workout = currentWorkout) => {
+    if (!workout || !workout.exercises || !Array.isArray(workout.exercises)) {
+      return { totalSets: 0, completedSets: 0, totalVolume: 0 };
+    }
+
+    let totalSets = 0;
+    let completedSets = 0;
+    let totalVolume = 0;
+
+    workout.exercises.forEach(exercise => {
+      if (exercise.actualSets && Array.isArray(exercise.actualSets)) {
+        totalSets += exercise.actualSets.length;
+        exercise.actualSets.forEach(set => {
+          if (set && set.completed) {
+            completedSets++;
+            if (set.weight && set.reps) {
+              let weight = parseFloat(set.weight) || 0;
+              const reps = parseInt(set.reps) || 0;
+              
+              // Convert lbs to kg for volume calculation
+              if (exercise.weightUnit === 'lbs') {
+                weight = weight / 2.205;
+              }
+              
+              totalVolume += weight * reps;
+            }
+          }
+        });
+      }
+    });
+
+    return { totalSets, completedSets, totalVolume: Math.round(totalVolume) };
+  }, [currentWorkout]);
+
   // Add exercise handler
   const handleAddExercise = async () => {
     if (newExercise.name && newExercise.category && newExercise.equipment) {
@@ -368,14 +583,14 @@ const WorkoutTracker = () => {
     }
   };
 
-  // Create template handler - FIXED
+  // Create template handler
   const handleCreateTemplate = () => {
     if (newTemplate.name.trim()) {
       try {
         const template = {
           id: Date.now(),
           name: newTemplate.name.trim(),
-          exercises: [] // Start with empty exercises array
+          exercises: []
         };
         setWorkoutTemplates(prev => [...prev, template]);
         setNewTemplate({ name: '', exercises: [] });
@@ -397,7 +612,7 @@ const WorkoutTracker = () => {
       }
 
       const workoutExercises = template.exercises.map(templateEx => {
-        const exercise = exercises.find(ex => ex.id === templateEx.exerciseId);
+        const exercise = allExercises.find(ex => ex.id === templateEx.exerciseId);
         return {
           ...exercise,
           plannedSets: templateEx.sets,
@@ -449,41 +664,6 @@ const WorkoutTracker = () => {
   const completeSet = (exerciseIndex, setIndex) => {
     dispatch({ type: 'COMPLETE_SET', payload: { exerciseIndex, setIndex } });
   };
-
-  // Calculate workout stats with proper error handling
-  const calculateWorkoutStats = useCallback((workout = currentWorkout) => {
-    if (!workout || !workout.exercises || !Array.isArray(workout.exercises)) {
-      return { totalSets: 0, completedSets: 0, totalVolume: 0 };
-    }
-
-    let totalSets = 0;
-    let completedSets = 0;
-    let totalVolume = 0;
-
-    workout.exercises.forEach(exercise => {
-      if (exercise.actualSets && Array.isArray(exercise.actualSets)) {
-        totalSets += exercise.actualSets.length;
-        exercise.actualSets.forEach(set => {
-          if (set && set.completed) {
-            completedSets++;
-            if (set.weight && set.reps) {
-              let weight = parseFloat(set.weight) || 0;
-              const reps = parseInt(set.reps) || 0;
-              
-              // Convert lbs to kg for volume calculation
-              if (exercise.weightUnit === 'lbs') {
-                weight = weight / 2.205;
-              }
-              
-              totalVolume += weight * reps;
-            }
-          }
-        });
-      }
-    });
-
-    return { totalSets, completedSets, totalVolume: Math.round(totalVolume) };
-  }, [currentWorkout]);
 
   // Finish workout handler with better error handling
   const finishWorkout = () => {
@@ -563,55 +743,17 @@ const WorkoutTracker = () => {
   // Delete template handler
   const deleteTemplate = (templateId) => {
     if (window.confirm('Are you sure you want to delete this template?')) {
-      try {
-        setWorkoutTemplates(prev => prev.filter(template => template.id !== templateId));
-        toast.success('Template deleted successfully!');
-      } catch (error) {
-        console.error('Failed to delete template:', error);
-        toast.error('Failed to delete template');
-      }
+      setWorkoutTemplates(prev => prev.filter(template => template.id !== templateId));
+      toast.success('Template deleted');
     }
   };
 
-  // Add exercise to template
-  const addExerciseToTemplate = (exerciseId) => {
-    if (!editingTemplate) return;
-    
-    const exerciseExists = editingTemplate.exercises.some(ex => ex.exerciseId === exerciseId);
-    if (exerciseExists) {
-      toast.error('Exercise already in template');
-      return;
-    }
-
+  // Update template exercise handler
+  const updateTemplateExercise = (exerciseIndex, field, value) => {
     setEditingTemplate(prev => ({
       ...prev,
-      exercises: [...prev.exercises, {
-        exerciseId,
-        sets: 3,
-        reps: '8-10',
-        weightUnit: 'kg'
-      }]
-    }));
-  };
-
-  // Remove exercise from template
-  const removeExerciseFromTemplate = (exerciseId) => {
-    if (!editingTemplate) return;
-    
-    setEditingTemplate(prev => ({
-      ...prev,
-      exercises: prev.exercises.filter(ex => ex.exerciseId !== exerciseId)
-    }));
-  };
-
-  // Update template exercise
-  const updateTemplateExercise = (exerciseId, field, value) => {
-    if (!editingTemplate) return;
-    
-    setEditingTemplate(prev => ({
-      ...prev,
-      exercises: prev.exercises.map(ex => 
-        ex.exerciseId === exerciseId ? { ...ex, [field]: value } : ex
+      exercises: prev.exercises.map((ex, idx) => 
+        idx === exerciseIndex ? { ...ex, [field]: value } : ex
       )
     }));
   };
@@ -685,15 +827,12 @@ const WorkoutTracker = () => {
                 </button>
               </div>
             </div>
-            <div className="mt-2 text-sm opacity-90">
-              {currentWorkout.templateName} • {stats.totalVolume}kg volume
-            </div>
           </div>
         </div>
       )}
 
-      {/* Main Content */}
-      <div className="px-4 py-4">
+      {/* Content */}
+      <div className="px-4 py-6 space-y-6">
         {/* Templates Tab */}
         {activeTab === 'templates' && (
           <div className="space-y-4">
@@ -706,78 +845,88 @@ const WorkoutTracker = () => {
                 <Plus className="h-5 w-5" />
               </button>
             </div>
-            
-            <div className="space-y-3">
-              {workoutTemplates.map(template => (
-                <div key={template.id} className="bg-white rounded-lg shadow-sm border p-4">
-                  <div className="flex items-start justify-between mb-2">
-                    <div className="flex-1">
+
+            {workoutTemplates.length === 0 ? (
+              <div className="text-center py-12 text-gray-500">
+                <Target className="h-12 w-12 mx-auto mb-4 opacity-50" />
+                <p>No workout templates yet.</p>
+                <p className="text-sm">Create your first template to get started!</p>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {workoutTemplates.map(template => (
+                  <div key={template.id} className="bg-white rounded-lg shadow-sm border p-4">
+                    <div className="flex items-center justify-between mb-3">
                       <h3 className="text-lg font-semibold text-gray-900">{template.name}</h3>
-                      <p className="text-sm text-gray-600 mb-2">
-                        {template.exercises.length} exercise{template.exercises.length !== 1 ? 's' : ''}
-                      </p>
-                      {template.exercises.length > 0 && (
-                        <div className="space-y-1">
-                          {template.exercises.slice(0, 2).map(templateEx => {
-                            const exercise = exercises.find(ex => ex.id === templateEx.exerciseId);
-                            return exercise ? (
-                              <div key={templateEx.exerciseId} className="text-sm text-gray-600">
-                                • {exercise.name} ({templateEx.sets} sets)
-                              </div>
-                            ) : null;
-                          })}
-                          {template.exercises.length > 2 && (
-                            <div className="text-sm text-gray-500">
-                              +{template.exercises.length - 2} more exercises
-                            </div>
-                          )}
-                        </div>
-                      )}
+                      <div className="flex items-center space-x-2">
+                        <button
+                          onClick={() => editTemplate(template)}
+                          className="text-blue-600 hover:text-blue-800 p-1"
+                        >
+                          <Edit2 className="h-4 w-4" />
+                        </button>
+                        <button
+                          onClick={() => deleteTemplate(template.id)}
+                          className="text-red-600 hover:text-red-800 p-1"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </button>
+                      </div>
                     </div>
-                    <div className="flex items-center space-x-2">
-                      <button
-                        onClick={() => editTemplate(template)}
-                        className="text-gray-400 hover:text-blue-600 p-1"
-                      >
-                        <Edit2 className="h-4 w-4" />
-                      </button>
-                      <button
-                        onClick={() => deleteTemplate(template.id)}
-                        className="text-gray-400 hover:text-red-600 p-1"
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </button>
+                    
+                    <div className="text-sm text-gray-600 mb-3">
+                      {template.exercises?.length || 0} exercises
                     </div>
+                    
+                    <button
+                      onClick={() => startWorkout(template)}
+                      className="w-full bg-blue-600 text-white py-2 px-4 rounded-lg hover:bg-blue-700 flex items-center justify-center space-x-2"
+                    >
+                      <Play className="h-4 w-4" />
+                      <span>Start Workout</span>
+                    </button>
                   </div>
-                  <button
-                    onClick={() => startWorkout(template)}
-                    className="w-full bg-blue-600 text-white py-3 px-4 rounded-lg hover:bg-blue-700 transition-colors flex items-center justify-center space-x-2"
-                    disabled={template.exercises.length === 0}
-                  >
-                    <Play className="h-4 w-4" />
-                    <span>Start Workout</span>
-                  </button>
-                </div>
-              ))}
-            </div>
+                ))}
+              </div>
+            )}
           </div>
         )}
 
         {/* Current Workout Tab */}
         {activeTab === 'current' && currentWorkout && (
           <div className="space-y-4">
-            <h2 className="text-xl font-bold text-gray-900">{currentWorkout.templateName}</h2>
-            
+            <div className="bg-white rounded-lg shadow-sm border p-4">
+              <h2 className="text-xl font-bold text-gray-900 mb-2">{currentWorkout.templateName}</h2>
+              <div className="grid grid-cols-3 gap-4 text-center">
+                <div>
+                  <div className="text-2xl font-bold text-blue-600">{stats.completedSets}</div>
+                  <div className="text-sm text-gray-600">Completed Sets</div>
+                </div>
+                <div>
+                  <div className="text-2xl font-bold text-green-600">{formatDuration(workoutDuration)}</div>
+                  <div className="text-sm text-gray-600">Duration</div>
+                </div>
+                <div>
+                  <div className="text-2xl font-bold text-purple-600">{stats.totalVolume}kg</div>
+                  <div className="text-sm text-gray-600">Volume</div>
+                </div>
+              </div>
+            </div>
+
+            {/* Exercises */}
             <div className="space-y-4">
               {currentWorkout.exercises.map((exercise, exerciseIndex) => (
-                <div key={exerciseIndex} className="bg-white rounded-lg shadow-sm border overflow-hidden">
+                <div key={exerciseIndex} className="bg-white rounded-lg shadow-sm border">
                   {/* Exercise Header */}
-                  <div className="bg-gray-50 px-4 py-3 border-b">
+                  <div className="p-4 border-b bg-gray-50 rounded-t-lg">
                     <div className="flex items-center justify-between">
-                      <h3 className="font-semibold text-gray-900">{exercise.name}</h3>
+                      <div>
+                        <h3 className="text-lg font-semibold text-gray-900">{exercise.name}</h3>
+                        <p className="text-sm text-gray-600">{exercise.category} • {exercise.equipment}</p>
+                      </div>
                       <button
                         onClick={() => toggleWeightUnit(exerciseIndex)}
-                        className="flex items-center space-x-1 bg-white border border-gray-300 rounded-full px-3 py-1 text-sm"
+                        className="text-sm bg-gray-100 px-3 py-1 rounded flex items-center space-x-1"
                       >
                         <span className={exercise.weightUnit === 'kg' ? 'font-semibold text-blue-600' : 'text-gray-600'}>KG</span>
                         <span className="text-gray-300">|</span>
@@ -815,59 +964,50 @@ const WorkoutTracker = () => {
                           
                           <div className="grid grid-cols-3 gap-3">
                             <div>
-                              <label className="block text-xs text-gray-600 mb-1">
+                              <label className="block text-xs font-medium text-gray-700 mb-1">
                                 Weight ({exercise.weightUnit})
                               </label>
                               <WorkoutInput
                                 exerciseIndex={exerciseIndex}
                                 setIndex={setIndex}
                                 field="weight"
-                                type="number"
                                 value={set.weight}
-                                min="0"
-                                step="0.5"
-                                placeholder="0"
                                 dispatch={dispatch}
-                                className="w-full p-2 border-2 border-gray-200 rounded-lg text-base focus:outline-none focus:border-blue-500"
+                                step="0.25"
+                                min="0"
                               />
                             </div>
-
                             <div>
-                              <label className="block text-xs text-gray-600 mb-1">Reps</label>
+                              <label className="block text-xs font-medium text-gray-700 mb-1">Reps</label>
                               <WorkoutInput
                                 exerciseIndex={exerciseIndex}
                                 setIndex={setIndex}
                                 field="reps"
-                                type="number"
                                 value={set.reps}
-                                min="1"
-                                max="50"
-                                placeholder="0"
                                 dispatch={dispatch}
-                                className="w-full p-2 border-2 border-gray-200 rounded-lg text-base focus:outline-none focus:border-blue-500"
+                                min="0"
+                                max="50"
                               />
                             </div>
-
                             <div>
-                              <label className="block text-xs text-gray-600 mb-1">RIR</label>
+                              <label className="block text-xs font-medium text-gray-700 mb-1">RIR</label>
                               <WorkoutSelect
                                 exerciseIndex={exerciseIndex}
                                 setIndex={setIndex}
                                 field="rir"
                                 value={set.rir}
-                                options={rirOptions}
                                 dispatch={dispatch}
-                                className="w-full p-2 border-2 border-gray-200 rounded-lg text-base focus:outline-none focus:border-blue-500"
+                                options={rirOptions}
                               />
                             </div>
                           </div>
                         </div>
                       ))}
                     </div>
-
+                    
                     <button
                       onClick={() => addSet(exerciseIndex)}
-                      className="w-full mt-3 border-2 border-dashed border-gray-300 rounded-lg py-3 text-gray-600 hover:border-blue-400 hover:text-blue-600 transition-colors flex items-center justify-center space-x-2"
+                      className="w-full mt-3 bg-gray-100 text-gray-700 py-2 px-4 rounded-lg hover:bg-gray-200 flex items-center justify-center space-x-2"
                     >
                       <Plus className="h-4 w-4" />
                       <span>Add Set</span>
@@ -885,22 +1025,19 @@ const WorkoutTracker = () => {
             <h2 className="text-xl font-bold text-gray-900">Workout History</h2>
             
             {workoutHistory.length === 0 ? (
-              <div className="text-center py-12">
-                <History className="h-12 w-12 text-gray-400 mx-auto mb-4" />
-                <h3 className="text-lg font-semibold text-gray-900 mb-2">No workouts yet</h3>
-                <p className="text-gray-600">Complete your first workout to see it here!</p>
+              <div className="text-center py-12 text-gray-500">
+                <History className="h-12 w-12 mx-auto mb-4 opacity-50" />
+                <p>No workout history yet.</p>
+                <p className="text-sm">Complete your first workout to see it here!</p>
               </div>
             ) : (
               <div className="space-y-3">
-                {workoutHistory.map(workout => {
-                  // Safely extract stats with defaults
-                  const workoutStats = workout.stats || calculateWorkoutStats(workout);
-                  const completedSets = workoutStats.completedSets || 0;
-                  const totalSets = workoutStats.totalSets || 0;
-                  const totalVolume = workoutStats.totalVolume || 0;
+                {workoutHistory.map((workout, index) => {
+                  const stats = calculateWorkoutStats(workout);
+                  const { completedSets, totalVolume } = stats;
                   
                   return (
-                    <div key={workout.id} className="bg-white rounded-lg shadow-sm border p-4">
+                    <div key={index} className="bg-white rounded-lg shadow-sm border p-4">
                       <div className="flex items-center justify-between mb-3">
                         <h3 className="text-lg font-semibold text-gray-900">{workout.templateName}</h3>
                         <span className="text-sm text-gray-600">
@@ -954,10 +1091,10 @@ const WorkoutTracker = () => {
             </div>
 
             {measurements.length === 0 ? (
-              <div className="text-center py-12">
-                <BarChart3 className="h-12 w-12 text-gray-400 mx-auto mb-4" />
-                <h3 className="text-lg font-semibold text-gray-900 mb-2">No measurements yet</h3>
-                <p className="text-gray-600">Add your first measurement to track progress!</p>
+              <div className="text-center py-12 text-gray-500">
+                <BarChart3 className="h-12 w-12 mx-auto mb-4 opacity-50" />
+                <p>No measurements yet.</p>
+                <p className="text-sm">Add your first measurement to track progress!</p>
               </div>
             ) : (
               <div className="space-y-3">
@@ -965,11 +1102,14 @@ const WorkoutTracker = () => {
                   <div key={measurement.id} className="bg-white rounded-lg shadow-sm border p-4">
                     <div className="flex items-center justify-between">
                       <div>
-                        <h3 className="font-semibold text-gray-900">{measurement.type}</h3>
+                        <h3 className="text-lg font-semibold text-gray-900">{measurement.type}</h3>
                         <p className="text-sm text-gray-600">{measurement.date}</p>
                       </div>
-                      <div className="text-xl font-bold text-blue-600">
-                        {measurement.value} {measurement.type === 'Weight' ? 'kg' : 'cm'}
+                      <div className="text-right">
+                        <div className="text-xl font-bold text-blue-600">{measurement.value}</div>
+                        <div className="text-xs text-gray-600">
+                          {measurement.type === 'Weight' ? 'kg' : 'cm'}
+                        </div>
                       </div>
                     </div>
                   </div>
@@ -979,7 +1119,7 @@ const WorkoutTracker = () => {
           </div>
         )}
 
-        {/* Exercises Tab */}
+        {/* Exercises Tab with Search */}
         {activeTab === 'exercises' && (
           <div className="space-y-4">
             <div className="flex items-center justify-between">
@@ -992,17 +1132,98 @@ const WorkoutTracker = () => {
               </button>
             </div>
 
+            {/* Search and Filters */}
+            <div className="bg-white rounded-lg shadow-sm border p-4 space-y-3">
+              {/* Search Bar */}
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+                <input
+                  type="text"
+                  placeholder="Search exercises..."
+                  value={exerciseSearchTerm}
+                  onChange={(e) => setExerciseSearchTerm(e.target.value)}
+                  className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+                {exerciseSearchTerm && (
+                  <button
+                    onClick={() => setExerciseSearchTerm('')}
+                    className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                  >
+                    <X className="h-4 w-4" />
+                  </button>
+                )}
+              </div>
+
+              {/* Filter Controls */}
+              <div className="grid grid-cols-2 gap-3">
+                <select
+                  value={selectedCategory}
+                  onChange={(e) => setSelectedCategory(e.target.value)}
+                  className="w-full p-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                >
+                  <option value="">All Categories</option>
+                  {categories.map(category => (
+                    <option key={category} value={category}>{category}</option>
+                  ))}
+                </select>
+
+                <select
+                  value={selectedEquipment}
+                  onChange={(e) => setSelectedEquipment(e.target.value)}
+                  className="w-full p-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                >
+                  <option value="">All Equipment</option>
+                  {equipmentTypes.map(equipment => (
+                    <option key={equipment} value={equipment}>{equipment}</option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Clear Filters */}
+              {(exerciseSearchTerm || selectedCategory || selectedEquipment) && (
+                <button
+                  onClick={clearFilters}
+                  className="w-full bg-gray-100 text-gray-700 py-2 px-4 rounded-lg hover:bg-gray-200"
+                >
+                  Clear Filters
+                </button>
+              )}
+
+              {/* Results Count */}
+              <div className="text-sm text-gray-600 text-center">
+                Showing {filteredExercises.length} of {allExercises.length} exercises
+              </div>
+            </div>
+
+            {/* Exercise List */}
             <div className="space-y-3">
-              {exercises.map(exercise => (
+              {filteredExercises.map(exercise => (
                 <div key={exercise.id} className="bg-white rounded-lg shadow-sm border p-4">
-                  <h3 className="text-lg font-semibold text-gray-900 mb-2">{exercise.name}</h3>
-                  <div className="space-y-1 text-sm text-gray-600">
-                    <p><span className="font-medium">Category:</span> {exercise.category}</p>
-                    <p><span className="font-medium">Equipment:</span> {exercise.equipment}</p>
+                  <div className="flex items-start justify-between">
+                    <div>
+                      <h3 className="text-lg font-semibold text-gray-900 mb-2">{exercise.name}</h3>
+                      <div className="space-y-1 text-sm text-gray-600">
+                        <p><span className="font-medium">Category:</span> {exercise.category}</p>
+                        <p><span className="font-medium">Equipment:</span> {exercise.equipment}</p>
+                      </div>
+                    </div>
+                    {exercise.is_custom && (
+                      <span className="bg-blue-100 text-blue-800 px-2 py-1 rounded text-xs font-medium">
+                        Custom
+                      </span>
+                    )}
                   </div>
                 </div>
               ))}
             </div>
+
+            {filteredExercises.length === 0 && (
+              <div className="text-center py-12 text-gray-500">
+                <Search className="h-12 w-12 mx-auto mb-4 opacity-50" />
+                <p>No exercises found.</p>
+                <p className="text-sm">Try adjusting your search or filters.</p>
+              </div>
+            )}
           </div>
         )}
       </div>
@@ -1025,129 +1246,156 @@ const WorkoutTracker = () => {
                 activeTab === id
                   ? 'bg-blue-100 text-blue-600'
                   : disabled
-                  ? 'text-gray-300 cursor-not-allowed'
-                  : 'text-gray-600 hover:text-gray-800'
+                  ? 'text-gray-300'
+                  : 'text-gray-600 hover:text-gray-900'
               }`}
             >
-              <Icon size={20} />
+              <Icon className="h-5 w-5" />
               <span className="text-xs">{label}</span>
             </button>
           ))}
         </div>
       </div>
 
+      {/* Modals */}
+      
+      {/* New Template Modal */}
+      {showNewTemplate && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-lg w-full max-w-md">
+            <div className="p-4 border-b">
+              <h3 className="text-lg font-semibold text-gray-900">Create New Template</h3>
+            </div>
+            <div className="p-4">
+              <input
+                type="text"
+                placeholder="Template name"
+                value={newTemplate.name}
+                onChange={(e) => setNewTemplate(prev => ({ ...prev, name: e.target.value }))}
+                className="w-full p-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+            </div>
+            <div className="p-4 border-t flex space-x-3">
+              <button
+                onClick={() => setShowNewTemplate(false)}
+                className="flex-1 py-2 px-4 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleCreateTemplate}
+                className="flex-1 py-2 px-4 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+              >
+                Create
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Template Editor Modal */}
       {showTemplateEditor && editingTemplate && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-lg w-full max-w-lg max-h-[90vh] overflow-y-auto">
+          <div className="bg-white rounded-lg w-full max-w-2xl max-h-[90vh] overflow-hidden">
             <div className="p-4 border-b">
               <h3 className="text-lg font-semibold text-gray-900">Edit Template</h3>
             </div>
-            
-            <div className="p-4 space-y-4">
-              {/* Template Name */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Template Name</label>
-                <input
-                  type="text"
-                  value={editingTemplate.name}
-                  onChange={(e) => setEditingTemplate(prev => ({ ...prev, name: e.target.value }))}
-                  className="w-full p-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                />
-              </div>
-
-              {/* Current Exercises */}
-              <div>
-                <h4 className="text-md font-semibold text-gray-900 mb-3">Current Exercises</h4>
-                {editingTemplate.exercises.length === 0 ? (
-                  <p className="text-gray-600 text-center py-4">No exercises added yet</p>
-                ) : (
-                  <div className="space-y-3">
-                    {editingTemplate.exercises.map(templateEx => {
-                      const exercise = exercises.find(ex => ex.id === templateEx.exerciseId);
-                      return exercise ? (
-                        <div key={templateEx.exerciseId} className="bg-gray-50 rounded-lg p-3">
-                          <div className="flex items-center justify-between mb-2">
-                            <h5 className="font-medium text-gray-900">{exercise.name}</h5>
-                            <button
-                              onClick={() => removeExerciseFromTemplate(templateEx.exerciseId)}
-                              className="text-red-600 hover:text-red-800 p-1"
-                            >
-                              <Trash2 className="h-4 w-4" />
-                            </button>
-                          </div>
-                          <div className="grid grid-cols-3 gap-2">
-                            <div>
-                              <label className="block text-xs text-gray-600 mb-1">Sets</label>
-                              <input
-                                type="number"
-                                value={templateEx.sets}
-                                onChange={(e) => updateTemplateExercise(templateEx.exerciseId, 'sets', parseInt(e.target.value) || 1)}
-                                className="w-full p-2 border border-gray-300 rounded text-center"
-                                min="1"
-                                max="10"
-                              />
-                            </div>
-                            <div>
-                              <label className="block text-xs text-gray-600 mb-1">Reps</label>
-                              <input
-                                type="text"
-                                value={templateEx.reps}
-                                onChange={(e) => updateTemplateExercise(templateEx.exerciseId, 'reps', e.target.value)}
-                                className="w-full p-2 border border-gray-300 rounded text-center"
-                                placeholder="8-10"
-                              />
-                            </div>
-                            <div>
-                              <label className="block text-xs text-gray-600 mb-1">Unit</label>
-                              <select
-                                value={templateEx.weightUnit}
-                                onChange={(e) => updateTemplateExercise(templateEx.exerciseId, 'weightUnit', e.target.value)}
-                                className="w-full p-2 border border-gray-300 rounded text-sm"
-                              >
-                                <option value="kg">KG</option>
-                                <option value="lbs">LBS</option>
-                              </select>
-                            </div>
-                          </div>
-                        </div>
-                      ) : null;
-                    })}
-                  </div>
-                )}
-              </div>
-
-              {/* Add Exercises */}
-              <div>
-                <h4 className="text-md font-semibold text-gray-900 mb-3">Add Exercises</h4>
-                <div className="space-y-2 max-h-48 overflow-y-auto">
-                  {exercises
-                    .filter(exercise => !editingTemplate.exercises.some(ex => ex.exerciseId === exercise.id))
-                    .map(exercise => (
-                      <div key={exercise.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
-                        <div>
-                          <h5 className="font-medium text-gray-900">{exercise.name}</h5>
-                          <p className="text-sm text-gray-600">{exercise.category}</p>
-                        </div>
+            <div className="p-4 overflow-y-auto max-h-[60vh]">
+              <input
+                type="text"
+                placeholder="Template name"
+                value={editingTemplate.name}
+                onChange={(e) => setEditingTemplate(prev => ({ ...prev, name: e.target.value }))}
+                className="w-full p-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 mb-4"
+              />
+              
+              <div className="space-y-4">
+                <h4 className="font-medium text-gray-900">Exercises</h4>
+                {editingTemplate.exercises?.map((exercise, index) => {
+                  const exerciseData = allExercises.find(ex => ex.id === exercise.exerciseId);
+                  return (
+                    <div key={index} className="bg-gray-50 rounded-lg p-3">
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="font-medium">{exerciseData?.name || 'Unknown Exercise'}</span>
                         <button
-                          onClick={() => addExerciseToTemplate(exercise.id)}
-                          className="bg-blue-600 text-white py-1 px-3 rounded text-sm hover:bg-blue-700"
+                          onClick={() => {
+                            setEditingTemplate(prev => ({
+                              ...prev,
+                              exercises: prev.exercises.filter((_, idx) => idx !== index)
+                            }));
+                          }}
+                          className="text-red-600 hover:text-red-800"
                         >
-                          Add
+                          <Trash2 className="h-4 w-4" />
                         </button>
                       </div>
-                    ))}
-                </div>
+                      <div className="grid grid-cols-3 gap-2">
+                        <div>
+                          <label className="block text-xs font-medium text-gray-700 mb-1">Sets</label>
+                          <input
+                            type="number"
+                            value={exercise.sets}
+                            onChange={(e) => updateTemplateExercise(index, 'sets', parseInt(e.target.value) || 0)}
+                            className="w-full p-2 border border-gray-300 rounded text-sm"
+                            min="1"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-xs font-medium text-gray-700 mb-1">Reps</label>
+                          <input
+                            type="number"
+                            value={exercise.reps}
+                            onChange={(e) => updateTemplateExercise(index, 'reps', parseInt(e.target.value) || 0)}
+                            className="w-full p-2 border border-gray-300 rounded text-sm"
+                            min="1"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-xs font-medium text-gray-700 mb-1">Unit</label>
+                          <select
+                            value={exercise.weightUnit}
+                            onChange={(e) => updateTemplateExercise(index, 'weightUnit', e.target.value)}
+                            className="w-full p-2 border border-gray-300 rounded text-sm"
+                          >
+                            <option value="kg">KG</option>
+                            <option value="lbs">LBS</option>
+                          </select>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+                
+                <button
+                  onClick={() => {
+                    // For now, just add a placeholder - in a real app you'd have an exercise picker
+                    const exerciseId = allExercises[0]?.id;
+                    if (exerciseId) {
+                      setEditingTemplate(prev => ({
+                        ...prev,
+                        exercises: [...(prev.exercises || []), {
+                          exerciseId,
+                          sets: 3,
+                          reps: 10,
+                          weightUnit: 'kg'
+                        }]
+                      }));
+                    }
+                  }}
+                  className="w-full bg-gray-100 text-gray-700 py-2 px-4 rounded-lg hover:bg-gray-200 flex items-center justify-center space-x-2"
+                >
+                  <Plus className="h-4 w-4" />
+                  <span>Add Exercise</span>
+                </button>
               </div>
             </div>
-
             <div className="p-4 border-t flex space-x-3">
               <button
                 onClick={() => {
                   setShowTemplateEditor(false);
                   setEditingTemplate(null);
                 }}
-                className="flex-1 py-2 px-4 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50"
+                className="flex-1 py-2 px-4 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200"
               >
                 Cancel
               </button>
@@ -1183,25 +1431,28 @@ const WorkoutTracker = () => {
                 className="w-full p-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
               >
                 <option value="">Select category</option>
-                <option value="Chest">Chest</option>
-                <option value="Back">Back</option>
-                <option value="Legs">Legs</option>
-                <option value="Shoulders">Shoulders</option>
-                <option value="Arms">Arms</option>
-                <option value="Core">Core</option>
+                {categories.map(category => (
+                  <option key={category} value={category}>{category}</option>
+                ))}
               </select>
-              <input
-                type="text"
-                placeholder="Equipment (e.g., Barbell, Dumbbell)"
+              <select
                 value={newExercise.equipment}
                 onChange={(e) => setNewExercise(prev => ({ ...prev, equipment: e.target.value }))}
                 className="w-full p-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-              />
+              >
+                <option value="">Select equipment</option>
+                {equipmentTypes.map(equipment => (
+                  <option key={equipment} value={equipment}>{equipment}</option>
+                ))}
+              </select>
             </div>
             <div className="p-4 border-t flex space-x-3">
               <button
-                onClick={() => setShowNewExercise(false)}
-                className="flex-1 py-2 px-4 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50"
+                onClick={() => {
+                  setShowNewExercise(false);
+                  setNewExercise({ name: '', category: '', equipment: '' });
+                }}
+                className="flex-1 py-2 px-4 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200"
               >
                 Cancel
               </button>
@@ -1209,7 +1460,7 @@ const WorkoutTracker = () => {
                 onClick={handleAddExercise}
                 className="flex-1 py-2 px-4 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
               >
-                Add Exercise
+                Add
               </button>
             </div>
           </div>
@@ -1221,7 +1472,7 @@ const WorkoutTracker = () => {
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
           <div className="bg-white rounded-lg w-full max-w-md">
             <div className="p-4 border-b">
-              <h3 className="text-lg font-semibold text-gray-900">Add Measurement</h3>
+              <h3 className="text-lg font-semibold text-gray-900">Add New Measurement</h3>
             </div>
             <div className="p-4 space-y-4">
               <select
@@ -1230,11 +1481,12 @@ const WorkoutTracker = () => {
                 className="w-full p-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
               >
                 <option value="">Select measurement type</option>
-                <option value="Weight">Weight</option>
-                <option value="Chest">Chest</option>
-                <option value="Waist">Waist</option>
-                <option value="Arms">Arms</option>
-                <option value="Thighs">Thighs</option>
+                <option value="Weight">Weight (kg)</option>
+                <option value="Body Fat %">Body Fat %</option>
+                <option value="Chest">Chest (cm)</option>
+                <option value="Waist">Waist (cm)</option>
+                <option value="Arms">Arms (cm)</option>
+                <option value="Thighs">Thighs (cm)</option>
               </select>
               <input
                 type="number"
@@ -1253,8 +1505,11 @@ const WorkoutTracker = () => {
             </div>
             <div className="p-4 border-t flex space-x-3">
               <button
-                onClick={() => setShowNewMeasurement(false)}
-                className="flex-1 py-2 px-4 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50"
+                onClick={() => {
+                  setShowNewMeasurement(false);
+                  setNewMeasurement({ type: '', value: '', date: new Date().toISOString().split('T')[0] });
+                }}
+                className="flex-1 py-2 px-4 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200"
               >
                 Cancel
               </button>
@@ -1262,41 +1517,7 @@ const WorkoutTracker = () => {
                 onClick={handleAddMeasurement}
                 className="flex-1 py-2 px-4 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
               >
-                Add Measurement
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* New Template Modal */}
-      {showNewTemplate && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-lg w-full max-w-md">
-            <div className="p-4 border-b">
-              <h3 className="text-lg font-semibold text-gray-900">Create Template</h3>
-            </div>
-            <div className="p-4 space-y-4">
-              <input
-                type="text"
-                placeholder="Template name (e.g., Push Day, Pull Day)"
-                value={newTemplate.name}
-                onChange={(e) => setNewTemplate(prev => ({ ...prev, name: e.target.value }))}
-                className="w-full p-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-              />
-            </div>
-            <div className="p-4 border-t flex space-x-3">
-              <button
-                onClick={() => setShowNewTemplate(false)}
-                className="flex-1 py-2 px-4 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleCreateTemplate}
-                className="flex-1 py-2 px-4 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
-              >
-                Create Template
+                Add
               </button>
             </div>
           </div>
