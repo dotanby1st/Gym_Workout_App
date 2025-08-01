@@ -219,6 +219,8 @@ const WorkoutTracker = () => {
   });
   const [selectedExerciseHistory, setSelectedExerciseHistory] = useState(null);
   const [currentTime, setCurrentTime] = useState(new Date());
+  const [editingTemplate, setEditingTemplate] = useState(null);
+  const [showTemplateEditor, setShowTemplateEditor] = useState(false);
 
   // RIR options with proper structure
   const rirOptions = useMemo(() => [
@@ -444,43 +446,47 @@ const WorkoutTracker = () => {
     dispatch({ type: 'COMPLETE_SET', payload: { exerciseIndex, setIndex } });
   };
 
-  // Calculate workout stats
-  const calculateWorkoutStats = useCallback(() => {
-    if (!currentWorkout) return { totalSets: 0, completedSets: 0, totalVolume: 0 };
+  // Calculate workout stats with proper error handling
+  const calculateWorkoutStats = useCallback((workout = currentWorkout) => {
+    if (!workout || !workout.exercises || !Array.isArray(workout.exercises)) {
+      return { totalSets: 0, completedSets: 0, totalVolume: 0 };
+    }
 
     let totalSets = 0;
     let completedSets = 0;
     let totalVolume = 0;
 
-    currentWorkout.exercises.forEach(exercise => {
-      totalSets += exercise.actualSets.length;
-      exercise.actualSets.forEach(set => {
-        if (set.completed) {
-          completedSets++;
-          if (set.weight && set.reps) {
-            let weight = parseFloat(set.weight);
-            const reps = parseInt(set.reps);
-            
-            // Convert lbs to kg for volume calculation
-            if (exercise.weightUnit === 'lbs') {
-              weight = weight / 2.205;
+    workout.exercises.forEach(exercise => {
+      if (exercise.actualSets && Array.isArray(exercise.actualSets)) {
+        totalSets += exercise.actualSets.length;
+        exercise.actualSets.forEach(set => {
+          if (set && set.completed) {
+            completedSets++;
+            if (set.weight && set.reps) {
+              let weight = parseFloat(set.weight) || 0;
+              const reps = parseInt(set.reps) || 0;
+              
+              // Convert lbs to kg for volume calculation
+              if (exercise.weightUnit === 'lbs') {
+                weight = weight / 2.205;
+              }
+              
+              totalVolume += weight * reps;
             }
-            
-            totalVolume += weight * reps;
           }
-        }
-      });
+        });
+      }
     });
 
     return { totalSets, completedSets, totalVolume: Math.round(totalVolume) };
   }, [currentWorkout]);
 
-  // Finish workout handler
+  // Finish workout handler with better error handling
   const finishWorkout = () => {
     if (!currentWorkout) return;
 
     try {
-      const stats = calculateWorkoutStats();
+      const stats = calculateWorkoutStats(currentWorkout);
       
       if (stats.completedSets === 0) {
         toast.error('Complete at least one set before finishing your workout!');
@@ -491,7 +497,11 @@ const WorkoutTracker = () => {
         ...currentWorkout,
         endTime: Date.now(),
         duration: workoutDuration,
-        stats
+        stats: {
+          totalSets: stats.totalSets,
+          completedSets: stats.completedSets,
+          totalVolume: stats.totalVolume
+        }
       };
 
       setWorkoutHistory(prev => [completedWorkout, ...prev]);
@@ -504,6 +514,90 @@ const WorkoutTracker = () => {
       console.error('Failed to finish workout:', error);
       toast.error('Failed to finish workout');
     }
+  };
+
+  // Edit template handler
+  const editTemplate = (template) => {
+    setEditingTemplate({ ...template });
+    setShowTemplateEditor(true);
+  };
+
+  // Save template handler
+  const saveTemplate = () => {
+    if (!editingTemplate || !editingTemplate.name.trim()) {
+      toast.error('Please enter a template name');
+      return;
+    }
+
+    try {
+      setWorkoutTemplates(prev => 
+        prev.map(template => 
+          template.id === editingTemplate.id ? editingTemplate : template
+        )
+      );
+      setShowTemplateEditor(false);
+      setEditingTemplate(null);
+      toast.success('Template updated successfully!');
+    } catch (error) {
+      console.error('Failed to save template:', error);
+      toast.error('Failed to save template');
+    }
+  };
+
+  // Delete template handler
+  const deleteTemplate = (templateId) => {
+    if (window.confirm('Are you sure you want to delete this template?')) {
+      try {
+        setWorkoutTemplates(prev => prev.filter(template => template.id !== templateId));
+        toast.success('Template deleted successfully!');
+      } catch (error) {
+        console.error('Failed to delete template:', error);
+        toast.error('Failed to delete template');
+      }
+    }
+  };
+
+  // Add exercise to template
+  const addExerciseToTemplate = (exerciseId) => {
+    if (!editingTemplate) return;
+    
+    const exerciseExists = editingTemplate.exercises.some(ex => ex.exerciseId === exerciseId);
+    if (exerciseExists) {
+      toast.error('Exercise already in template');
+      return;
+    }
+
+    setEditingTemplate(prev => ({
+      ...prev,
+      exercises: [...prev.exercises, {
+        exerciseId,
+        sets: 3,
+        reps: '8-10',
+        weightUnit: 'kg'
+      }]
+    }));
+  };
+
+  // Remove exercise from template
+  const removeExerciseFromTemplate = (exerciseId) => {
+    if (!editingTemplate) return;
+    
+    setEditingTemplate(prev => ({
+      ...prev,
+      exercises: prev.exercises.filter(ex => ex.exerciseId !== exerciseId)
+    }));
+  };
+
+  // Update template exercise
+  const updateTemplateExercise = (exerciseId, field, value) => {
+    if (!editingTemplate) return;
+    
+    setEditingTemplate(prev => ({
+      ...prev,
+      exercises: prev.exercises.map(ex => 
+        ex.exerciseId === exerciseId ? { ...ex, [field]: value } : ex
+      )
+    }));
   };
 
   // Cancel workout handler
@@ -744,8 +838,41 @@ const WorkoutTracker = () => {
           <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
             {workoutTemplates.map(template => (
               <div key={template.id} className="bg-white rounded-lg shadow-md p-6">
-                <h3 className="text-lg font-semibold text-gray-900 mb-2">{template.name}</h3>
+                <div className="flex items-start justify-between mb-2">
+                  <h3 className="text-lg font-semibold text-gray-900">{template.name}</h3>
+                  <div className="flex items-center space-x-1">
+                    <button
+                      onClick={() => editTemplate(template)}
+                      className="text-gray-400 hover:text-blue-600 p-1"
+                      title="Edit template"
+                    >
+                      <Edit2 className="h-4 w-4" />
+                    </button>
+                    <button
+                      onClick={() => deleteTemplate(template.id)}
+                      className="text-gray-400 hover:text-red-600 p-1"
+                      title="Delete template"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </button>
+                  </div>
+                </div>
                 <p className="text-gray-600 mb-4">{template.exercises.length} exercises</p>
+                <div className="space-y-1 mb-4">
+                  {template.exercises.slice(0, 3).map(templateEx => {
+                    const exercise = exercises.find(ex => ex.id === templateEx.exerciseId);
+                    return exercise ? (
+                      <div key={templateEx.exerciseId} className="text-sm text-gray-600">
+                        • {exercise.name} ({templateEx.sets} sets)
+                      </div>
+                    ) : null;
+                  })}
+                  {template.exercises.length > 3 && (
+                    <div className="text-sm text-gray-500">
+                      +{template.exercises.length - 3} more exercises
+                    </div>
+                  )}
+                </div>
                 <button
                   onClick={() => startWorkout(template)}
                   className="w-full bg-blue-600 text-white py-2 px-4 rounded-lg hover:bg-blue-700 transition-colors flex items-center justify-center space-x-2"
@@ -788,31 +915,49 @@ const WorkoutTracker = () => {
               </div>
             ) : (
               <div className="grid gap-4">
-                {workoutHistory.map(workout => (
-                  <div key={workout.id} className="bg-white rounded-lg shadow-md p-6">
-                    <div className="flex items-center justify-between mb-4">
-                      <h3 className="text-lg font-semibold text-gray-900">{workout.templateName}</h3>
-                      <span className="text-sm text-gray-600">
-                        {new Date(workout.startTime).toLocaleDateString()}
-                      </span>
+                {workoutHistory.map(workout => {
+                  // Safely extract stats with defaults
+                  const workoutStats = workout.stats || calculateWorkoutStats(workout);
+                  const completedSets = workoutStats.completedSets || 0;
+                  const totalSets = workoutStats.totalSets || 0;
+                  const totalVolume = workoutStats.totalVolume || 0;
+                  
+                  return (
+                    <div key={workout.id} className="bg-white rounded-lg shadow-md p-6">
+                      <div className="flex items-center justify-between mb-4">
+                        <h3 className="text-lg font-semibold text-gray-900">{workout.templateName}</h3>
+                        <span className="text-sm text-gray-600">
+                          {new Date(workout.startTime).toLocaleDateString()}
+                        </span>
+                      </div>
+                      
+                      <div className="grid grid-cols-3 gap-4 text-center">
+                        <div>
+                          <div className="text-2xl font-bold text-blue-600">{completedSets}</div>
+                          <div className="text-sm text-gray-600">Sets Completed</div>
+                        </div>
+                        <div>
+                          <div className="text-2xl font-bold text-green-600">
+                            {formatDuration(workout.duration || 0)}
+                          </div>
+                          <div className="text-sm text-gray-600">Duration</div>
+                        </div>
+                        <div>
+                          <div className="text-2xl font-bold text-purple-600">{totalVolume}kg</div>
+                          <div className="text-sm text-gray-600">Volume</div>
+                        </div>
+                      </div>
+
+                      {workout.exercises && workout.exercises.length > 0 && (
+                        <div className="mt-4 pt-4 border-t">
+                          <div className="text-sm text-gray-600">
+                            <strong>Exercises:</strong> {workout.exercises.map(ex => ex.name).join(', ')}
+                          </div>
+                        </div>
+                      )}
                     </div>
-                    
-                    <div className="grid grid-cols-3 gap-4 text-center">
-                      <div>
-                        <div className="text-2xl font-bold text-blue-600">{workout.stats.completedSets}</div>
-                        <div className="text-sm text-gray-600">Sets</div>
-                      </div>
-                      <div>
-                        <div className="text-2xl font-bold text-green-600">{formatDuration(workout.duration)}</div>
-                        <div className="text-sm text-gray-600">Duration</div>
-                      </div>
-                      <div>
-                        <div className="text-2xl font-bold text-purple-600">{workout.stats.totalVolume}kg</div>
-                        <div className="text-sm text-gray-600">Volume</div>
-                      </div>
-                    </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             )}
           </div>
@@ -984,6 +1129,126 @@ const WorkoutTracker = () => {
                 className="flex-1 py-2 px-4 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
               >
                 Add Measurement
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Template Editor Modal */}
+      {showTemplateEditor && editingTemplate && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-lg p-6 w-full max-w-4xl max-h-[90vh] overflow-y-auto">
+            <h3 className="text-lg font-semibold text-gray-900 mb-4">Edit Template</h3>
+            
+            {/* Template Name */}
+            <div className="mb-6">
+              <label className="block text-sm font-medium text-gray-700 mb-2">Template Name</label>
+              <input
+                type="text"
+                value={editingTemplate.name}
+                onChange={(e) => setEditingTemplate(prev => ({ ...prev, name: e.target.value }))}
+                className="w-full p-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+            </div>
+
+            {/* Current Exercises */}
+            <div className="mb-6">
+              <h4 className="text-md font-semibold text-gray-900 mb-3">Exercises in Template</h4>
+              {editingTemplate.exercises.length === 0 ? (
+                <p className="text-gray-600 text-center py-4">No exercises added yet</p>
+              ) : (
+                <div className="space-y-3">
+                  {editingTemplate.exercises.map(templateEx => {
+                    const exercise = exercises.find(ex => ex.id === templateEx.exerciseId);
+                    return exercise ? (
+                      <div key={templateEx.exerciseId} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                        <div className="flex-1">
+                          <h5 className="font-medium text-gray-900">{exercise.name}</h5>
+                          <p className="text-sm text-gray-600">{exercise.category} • {exercise.equipment}</p>
+                        </div>
+                        <div className="flex items-center space-x-3">
+                          <div className="flex items-center space-x-2">
+                            <input
+                              type="number"
+                              value={templateEx.sets}
+                              onChange={(e) => updateTemplateExercise(templateEx.exerciseId, 'sets', parseInt(e.target.value) || 1)}
+                              className="w-16 p-1 border border-gray-300 rounded text-center"
+                              min="1"
+                              max="10"
+                            />
+                            <span className="text-sm text-gray-600">sets</span>
+                          </div>
+                          <div className="flex items-center space-x-2">
+                            <input
+                              type="text"
+                              value={templateEx.reps}
+                              onChange={(e) => updateTemplateExercise(templateEx.exerciseId, 'reps', e.target.value)}
+                              className="w-20 p-1 border border-gray-300 rounded text-center"
+                              placeholder="8-10"
+                            />
+                            <span className="text-sm text-gray-600">reps</span>
+                          </div>
+                          <select
+                            value={templateEx.weightUnit}
+                            onChange={(e) => updateTemplateExercise(templateEx.exerciseId, 'weightUnit', e.target.value)}
+                            className="p-1 border border-gray-300 rounded text-sm"
+                          >
+                            <option value="kg">KG</option>
+                            <option value="lbs">LBS</option>
+                          </select>
+                          <button
+                            onClick={() => removeExerciseFromTemplate(templateEx.exerciseId)}
+                            className="text-red-600 hover:text-red-800 p-1"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </button>
+                        </div>
+                      </div>
+                    ) : null;
+                  })}
+                </div>
+              )}
+            </div>
+
+            {/* Add Exercises */}
+            <div className="mb-6">
+              <h4 className="text-md font-semibold text-gray-900 mb-3">Add Exercises</h4>
+              <div className="grid gap-3 max-h-60 overflow-y-auto">
+                {exercises
+                  .filter(exercise => !editingTemplate.exercises.some(ex => ex.exerciseId === exercise.id))
+                  .map(exercise => (
+                    <div key={exercise.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                      <div>
+                        <h5 className="font-medium text-gray-900">{exercise.name}</h5>
+                        <p className="text-sm text-gray-600">{exercise.category} • {exercise.equipment}</p>
+                      </div>
+                      <button
+                        onClick={() => addExerciseToTemplate(exercise.id)}
+                        className="bg-blue-600 text-white py-1 px-3 rounded text-sm hover:bg-blue-700 transition-colors"
+                      >
+                        Add
+                      </button>
+                    </div>
+                  ))}
+              </div>
+            </div>
+
+            <div className="flex space-x-3">
+              <button
+                onClick={() => {
+                  setShowTemplateEditor(false);
+                  setEditingTemplate(null);
+                }}
+                className="flex-1 py-2 px-4 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={saveTemplate}
+                className="flex-1 py-2 px-4 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+              >
+                Save Template
               </button>
             </div>
           </div>
